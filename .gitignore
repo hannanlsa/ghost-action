@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+dist/
+build/
+*.egg-info/
+.DS_Store
+*.dmg
+*.exe
+.env
+screenshots/
+templates/
+logs/

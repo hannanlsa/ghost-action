@@ -1,0 +1,7 @@
+pynput
+mss
+Pillow
+pytesseract
+pyobjc-framework-Quartz
+opencv-python-headless
+numpy
