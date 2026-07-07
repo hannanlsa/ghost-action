@@ -210,6 +210,7 @@ class AutoRepeatApp:
         self._build_ui()
         self._refresh_scripts()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.after(3000, self._check_update)
 
     def _build_ui(self):
         main = ttk.Frame(self.root, padding=8)
@@ -245,6 +246,11 @@ class AutoRepeatApp:
         self.count_var = tk.StringVar(value="")
         ttk.Label(row2, textvariable=self.count_var, foreground="#999").pack(side=tk.RIGHT)
 
+        self.version_var = tk.StringVar(value=f"GhostAction v{mp.CURRENT_VERSION}")
+        version_label = ttk.Label(row2, textvariable=self.version_var, foreground="#999", cursor="hand2")
+        version_label.pack(side=tk.RIGHT, padx=(0, 12))
+        version_label.bind("<Button-1>", lambda e: self._check_update_manual())
+
         nb = ttk.Notebook(main)
         nb.pack(fill=tk.BOTH, expand=True)
 
@@ -271,8 +277,7 @@ class AutoRepeatApp:
         ttk.Button(btn_frame, text="重命名", command=self._rename, width=8).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="删除", command=self._delete, width=8).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="刷新", command=self._refresh_scripts, width=8).pack(side=tk.LEFT, padx=3)
-        ttk.Separator(btn_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        ttk.Button(btn_frame, text="📤 共享", command=self._share_script, width=8).pack(side=tk.LEFT, padx=3)
+
 
         self.editor_tab = ttk.Frame(nb)
         nb.add(self.editor_tab, text=" 编辑 ")
@@ -1192,6 +1197,36 @@ class AutoRepeatApp:
         self.root.iconify()
         self._update_record_count()
 
+    def _check_update(self):
+        threading.Thread(target=self._do_check_update, daemon=True).start()
+
+    def _check_update_manual(self):
+        self.status_var.set("正在检查更新...")
+        threading.Thread(target=self._do_check_update, args=(True,), daemon=True).start()
+
+    def _do_check_update(self, manual=False):
+        info = mp.check_update()
+        if info:
+            self.root.after(0, self._show_update_dialog, info)
+        elif manual:
+            self.root.after(0, lambda: (
+                self.status_var.set("已是最新版本"),
+                messagebox.showinfo("检查更新", f"GhostAction v{mp.CURRENT_VERSION}\n已是最新版本")
+            ))
+
+    def _show_update_dialog(self, info):
+        ver = info["version"]
+        url = info.get("url", "")
+        notes = info.get("notes", "")[:300]
+        self.version_var.set(f"⬆️ v{ver} 可更新!")
+        msg = f"发现新版本: v{ver}\n\n当前版本: v{mp.CURRENT_VERSION}\n\n"
+        if notes:
+            msg += f"更新内容:\n{notes}\n\n"
+        msg += "是否前往下载？"
+        if messagebox.askyesno("GhostAction 更新", msg):
+            import webbrowser
+            webbrowser.open(url) if url else None
+
     def _on_close(self):
         if self.recording:
             self._stop_record()
@@ -1212,13 +1247,6 @@ class AutoRepeatApp:
         search_entry.bind("<Return>", lambda e: self._market_search())
         ttk.Button(search_frame, text="🔍 搜索", command=self._market_search, width=8).pack(side=tk.LEFT, padx=4)
         ttk.Button(search_frame, text="🔄 刷新", command=self._market_refresh, width=8).pack(side=tk.LEFT, padx=4)
-
-        ttk.Separator(search_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
-        ttk.Label(search_frame, text="GitHub Token:").pack(side=tk.LEFT, padx=(0, 4))
-        self.token_var = tk.StringVar()
-        token_entry = ttk.Entry(search_frame, textvariable=self.token_var, width=25, show="*")
-        token_entry.pack(side=tk.LEFT, padx=(0, 4))
-        ttk.Button(search_frame, text="保存", command=self._save_token, width=6).pack(side=tk.LEFT)
 
         cols = ("name", "author", "tags", "steps", "description")
         self.market_tree = ttk.Treeview(self.market_tab, columns=cols, show="headings", height=10)
@@ -1243,32 +1271,11 @@ class AutoRepeatApp:
         ttk.Button(action_frame, text="📥 下载", command=self._market_download, width=10).pack(side=tk.LEFT, padx=3)
         ttk.Button(action_frame, text="🔀 智能合并", command=self._market_merge, width=10).pack(side=tk.LEFT, padx=3)
         ttk.Button(action_frame, text="📋 详情", command=self._market_detail, width=8).pack(side=tk.LEFT, padx=3)
+        ttk.Separator(action_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
+        ttk.Button(action_frame, text="📤 共享到GitHub", command=self._share_script, width=14).pack(side=tk.LEFT, padx=3)
 
-        self._load_token()
         self._market_refresh()
 
-    def _load_token(self):
-        token_file = os.path.join(self._scripts_dir, ".github_token")
-        if os.path.exists(token_file):
-            try:
-                with open(token_file, "r") as f:
-                    self.token_var.set(f.read().strip())
-                    mp.set_token(self.token_var.get())
-            except Exception:
-                pass
-
-    def _save_token(self):
-        token = self.token_var.get().strip()
-        mp.set_token(token)
-        token_file = os.path.join(self._scripts_dir, ".github_token")
-        try:
-            os.makedirs(os.path.dirname(token_file), exist_ok=True)
-            with open(token_file, "w") as f:
-                f.write(token)
-            os.chmod(token_file, 0o600)
-            self.status_var.set("Token已保存")
-        except Exception as e:
-            messagebox.showerror("错误", f"保存Token失败: {e}")
 
     def _market_refresh(self):
         self.status_var.set("正在加载脚本市场...")
@@ -1287,26 +1294,52 @@ class AutoRepeatApp:
         scripts = mp.search_scripts(keyword)
         self.root.after(0, self._update_market_tree, scripts)
 
-    def _update_market_tree(self, scripts):
+    def _update_market_tree(self, remote_scripts):
         for item in self.market_tree.get_children():
             self.market_tree.delete(item)
-        for s in scripts:
+
+        local_scripts = self.sm.list_all()
+        for s in local_scripts:
+            self.market_tree.insert("", tk.END, values=(
+                s.get("name", ""),
+                "本地",
+                "📁 本地",
+                s.get("events", ""),
+                "",
+            ), tags=("local",))
+
+        for s in remote_scripts:
             self.market_tree.insert("", tk.END, values=(
                 s.get("name", ""),
                 s.get("author", ""),
                 ", ".join(s.get("tags", [])),
                 s.get("step_count", ""),
                 s.get("description", ""),
-            ))
-        self.status_var.set(f"市场: {len(scripts)} 个脚本")
+            ), tags=("remote",))
 
-    def _get_selected_market_script(self):
+        self.market_tree.tag_configure("local", foreground="#2563eb")
+        self.market_tree.tag_configure("remote", foreground="#1a1a1a")
+        self.status_var.set(f"市场: {len(local_scripts)} 本地 + {len(remote_scripts)} 远程")
+
+    def _is_local_selected(self):
         sel = self.market_tree.selection()
         if not sel:
-            messagebox.showwarning("提示", "请先选择一个脚本")
+            return False
+        tags = self.market_tree.item(sel[0]).get("tags", ())
+        return "local" in tags
+
+    def _get_selected_market_name(self):
+        sel = self.market_tree.selection()
+        if not sel:
             return None
-        item = self.market_tree.item(sel[0])
-        name = item["values"][0]
+        return self.market_tree.item(sel[0])["values"][0]
+
+    def _get_selected_market_script(self):
+        if self._is_local_selected():
+            return None
+        name = self._get_selected_market_name()
+        if not name:
+            return None
         index = mp.get_index()
         if not index:
             return None
@@ -1316,6 +1349,9 @@ class AutoRepeatApp:
         return None
 
     def _market_download(self):
+        if self._is_local_selected():
+            messagebox.showinfo("提示", "这是本地脚本，无需下载")
+            return
         entry = self._get_selected_market_script()
         if not entry:
             return
@@ -1333,10 +1369,14 @@ class AutoRepeatApp:
 
     def _after_market_download(self, name):
         self._refresh_scripts()
+        self._market_refresh()
         self.status_var.set(f"已下载: {name}")
         messagebox.showinfo("成功", f"脚本 '{name}' 已下载到本地")
 
     def _market_merge(self):
+        if self._is_local_selected():
+            messagebox.showinfo("提示", "这是本地脚本，请选择远程脚本进行合并")
+            return
         entry = self._get_selected_market_script()
         if not entry:
             return
@@ -1359,67 +1399,67 @@ class AutoRepeatApp:
 
     def _after_market_merge(self, name, added, enhanced):
         self._refresh_scripts()
+        self._market_refresh()
         self.status_var.set(f"已合并: {name} (+{added}步, 增强{enhanced}处)")
         messagebox.showinfo("合并完成", f"脚本 '{name}' 已合并\n新增 {added} 步\n增强 {enhanced} 处")
 
     def _market_detail(self):
-        entry = self._get_selected_market_script()
-        if not entry:
+        name = self._get_selected_market_name()
+        if not name:
             return
-        name = entry.get("name", "")
         local_data = self.sm.load(name)
         local_fp = mp.compute_fingerprint(local_data) if local_data else None
-        remote_fp = {"step_count": entry.get("step_count", 0)}
         detail = f"脚本: {name}\n"
-        detail += f"作者: {entry.get('author', '')}\n"
-        detail += f"标签: {', '.join(entry.get('tags', []))}\n"
-        detail += f"描述: {entry.get('description', '')}\n"
-        detail += f"目标应用: {entry.get('target_app', '')}\n"
-        detail += f"远程步骤数: {entry.get('step_count', '?')}\n"
+        if self._is_local_selected():
+            detail += "来源: 📁 本地\n"
+        else:
+            entry = self._get_selected_market_script()
+            if entry:
+                detail += f"来源: 🌐 远程\n"
+                detail += f"作者: {entry.get('author', '')}\n"
+                detail += f"标签: {', '.join(entry.get('tags', []))}\n"
+                detail += f"描述: {entry.get('description', '')}\n"
+                detail += f"目标应用: {entry.get('target_app', '')}\n"
+                detail += f"远程步骤数: {entry.get('step_count', '?')}\n"
         if local_fp:
-            detail += f"\n--- 本地对比 ---\n"
-            detail += f"本地步骤: {local_fp['step_count']}\n"
+            detail += f"\n--- 本地指纹 ---\n"
+            detail += f"步骤数: {local_fp['step_count']}\n"
+            detail += f"窗口数: {local_fp['window_count']}\n"
             detail += f"OCR覆盖率: {local_fp['ocr_coverage']:.0%}\n"
             detail += f"模板覆盖率: {local_fp['template_coverage']:.0%}\n"
-            score = mp.compare_fingerprints(local_fp, remote_fp)
-            if score > 0:
-                detail += f"\n💡 远程脚本更优（+{score}分），建议合并"
-            else:
-                detail += f"\n✅ 本地脚本已足够完善"
+            detail += f"逻辑链: {'有' if local_fp['has_logic_chain'] else '无'}\n"
         messagebox.showinfo("脚本详情", detail)
 
     def _share_script(self):
-        sel = self.tree.selection()
-        if not sel:
-            messagebox.showwarning("提示", "请先选择一个脚本")
+        if not self._is_local_selected():
+            messagebox.showinfo("提示", "请选择一个本地脚本进行共享")
             return
-        item = self.tree.item(sel[0])
-        name = item["values"][0]
-        if not self.token_var.get().strip():
-            messagebox.showwarning("提示", "请先在「市场」标签页设置GitHub Token")
+        name = self._get_selected_market_name()
+        if not name:
             return
+
         data = self.sm.load(name)
         if not data:
             return
         data["name"] = name
-        tags_str = _ask_string(self.root, "共享", "输入标签(逗号分隔):", initialvalue="") or ""
-        if tags_str:
-            if "meta" not in data:
-                data["meta"] = {}
-            data["meta"]["tags"] = [t.strip() for t in tags_str.split(",") if t.strip()]
-        self.status_var.set(f"上传中: {name}...")
-        threading.Thread(target=self._do_share, args=(name, data), daemon=True).start()
-
-    def _do_share(self, name, data):
-        result = mp.upload_script(data, token=self.token_var.get().strip())
-        if result:
-            self.root.after(0, self._after_share, name, result)
-        else:
-            self.root.after(0, lambda: messagebox.showerror("错误", "上传失败，请检查Token"))
-
-    def _after_share(self, name, result):
-        self.status_var.set(f"已共享: {name}")
-        messagebox.showinfo("共享成功", f"脚本 '{name}' 已上传\n\nGist链接:\n{result['gist_url']}")
+        script_json = json.dumps(data, ensure_ascii=False, indent=2)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(script_json)
+        import subprocess
+        import webbrowser
+        gist_url = "https://gist.github.com/"
+        try:
+            webbrowser.open(gist_url)
+        except Exception:
+            subprocess.run(["open", gist_url])
+        messagebox.showinfo("共享脚本",
+            f"脚本 '{name}' 的JSON已复制到剪贴板！\n\n"
+            f"操作步骤：\n"
+            f"1. 浏览器已打开 GitHub Gist 页面\n"
+            f"2. 在文件名处输入: {name}.json\n"
+            f"3. 粘贴剪贴板内容 (⌘V)\n"
+            f"4. 点击 'Create public gist'\n\n"
+            f"创建后把Gist链接发到社区即可！")
 
 
 def main():

@@ -3,6 +3,9 @@ import json
 import logging
 import requests
 
+APP_REPO = "hannanlsa/ghost-action"
+CURRENT_VERSION = "1.2.0"
+
 logger = logging.getLogger("marketplace")
 
 MARKETPLACE_REPO = "hannanlsa/ghost-action-marketplace"
@@ -192,3 +195,40 @@ def merge_scripts(local_data, remote_data):
     result["meta"]["merged_from"] = remote_data.get("name", "unknown")
     result["meta"]["merge_info"] = {"added": added, "enhanced": enhanced}
     return result, added, enhanced
+
+
+def check_update():
+    try:
+        url = f"{GITHUB_API}/repos/{APP_REPO}/releases/latest"
+        resp = requests.get(url, headers=_headers(), timeout=10)
+        if resp.status_code != 200:
+            return None
+        release = resp.json()
+        tag = release.get("tag_name", "").lstrip("v")
+        if not tag:
+            return None
+        if _compare_versions(tag, CURRENT_VERSION) > 0:
+            return {
+                "version": tag,
+                "url": release.get("html_url", ""),
+                "notes": release.get("body", ""),
+                "download_url": "",
+            }
+            for asset in release.get("assets", []):
+                if asset.get("name", "").endswith(".dmg"):
+                    result["download_url"] = asset["browser_download_url"]
+                    break
+            return result
+        return None
+    except Exception as e:
+        logger.debug("检查更新失败: %s", e)
+        return None
+
+
+def _compare_versions(v1, v2):
+    parts1 = [int(x) for x in v1.split(".")]
+    parts2 = [int(x) for x in v2.split(".")]
+    for a, b in zip(parts1, parts2):
+        if a != b:
+            return a - b
+    return len(parts1) - len(parts2)
