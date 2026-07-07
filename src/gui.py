@@ -11,6 +11,8 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+import marketplace as mp
+
 IS_MAC = platform.system() == "Darwin"
 
 
@@ -269,11 +271,17 @@ class AutoRepeatApp:
         ttk.Button(btn_frame, text="重命名", command=self._rename, width=8).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="删除", command=self._delete, width=8).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="刷新", command=self._refresh_scripts, width=8).pack(side=tk.LEFT, padx=3)
+        ttk.Separator(btn_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        ttk.Button(btn_frame, text="📤 共享", command=self._share_script, width=8).pack(side=tk.LEFT, padx=3)
 
         self.editor_tab = ttk.Frame(nb)
         nb.add(self.editor_tab, text=" 编辑 ")
 
+        self.market_tab = ttk.Frame(nb)
+        nb.add(self.market_tab, text=" 🏪 市场 ")
+
         self._build_editor()
+        self._build_marketplace()
         self._start_hotkey_listener()
         self._pump_ns_runloop()
 
@@ -1190,6 +1198,228 @@ class AutoRepeatApp:
         if self.playing:
             self._stop_play()
         self.root.destroy()
+
+    def _build_marketplace(self):
+        for w in self.market_tab.winfo_children():
+            w.destroy()
+
+        search_frame = ttk.Frame(self.market_tab)
+        search_frame.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(search_frame, text="搜索:").pack(side=tk.LEFT, padx=(0, 4))
+        self.market_search_var = tk.StringVar()
+        search_entry = ttk.Entry(search_frame, textvariable=self.market_search_var, width=30)
+        search_entry.pack(side=tk.LEFT, padx=(0, 4))
+        search_entry.bind("<Return>", lambda e: self._market_search())
+        ttk.Button(search_frame, text="🔍 搜索", command=self._market_search, width=8).pack(side=tk.LEFT, padx=4)
+        ttk.Button(search_frame, text="🔄 刷新", command=self._market_refresh, width=8).pack(side=tk.LEFT, padx=4)
+
+        ttk.Separator(search_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
+        ttk.Label(search_frame, text="GitHub Token:").pack(side=tk.LEFT, padx=(0, 4))
+        self.token_var = tk.StringVar()
+        token_entry = ttk.Entry(search_frame, textvariable=self.token_var, width=25, show="*")
+        token_entry.pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(search_frame, text="保存", command=self._save_token, width=6).pack(side=tk.LEFT)
+
+        cols = ("name", "author", "tags", "steps", "description")
+        self.market_tree = ttk.Treeview(self.market_tab, columns=cols, show="headings", height=10)
+        self.market_tree.heading("name", text="脚本名")
+        self.market_tree.heading("author", text="作者")
+        self.market_tree.heading("tags", text="标签")
+        self.market_tree.heading("steps", text="步骤")
+        self.market_tree.heading("description", text="描述")
+        self.market_tree.column("name", width=150)
+        self.market_tree.column("author", width=80)
+        self.market_tree.column("tags", width=120)
+        self.market_tree.column("steps", width=50)
+        self.market_tree.column("description", width=300)
+        self.market_tree.pack(fill=tk.BOTH, expand=True)
+
+        msb = ttk.Scrollbar(self.market_tab, orient=tk.VERTICAL, command=self.market_tree.yview)
+        msb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.market_tree.configure(yscrollcommand=msb.set)
+
+        action_frame = ttk.Frame(self.market_tab)
+        action_frame.pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(action_frame, text="📥 下载", command=self._market_download, width=10).pack(side=tk.LEFT, padx=3)
+        ttk.Button(action_frame, text="🔀 智能合并", command=self._market_merge, width=10).pack(side=tk.LEFT, padx=3)
+        ttk.Button(action_frame, text="📋 详情", command=self._market_detail, width=8).pack(side=tk.LEFT, padx=3)
+
+        self._load_token()
+        self._market_refresh()
+
+    def _load_token(self):
+        token_file = os.path.join(self._scripts_dir, ".github_token")
+        if os.path.exists(token_file):
+            try:
+                with open(token_file, "r") as f:
+                    self.token_var.set(f.read().strip())
+                    mp.set_token(self.token_var.get())
+            except Exception:
+                pass
+
+    def _save_token(self):
+        token = self.token_var.get().strip()
+        mp.set_token(token)
+        token_file = os.path.join(self._scripts_dir, ".github_token")
+        try:
+            os.makedirs(os.path.dirname(token_file), exist_ok=True)
+            with open(token_file, "w") as f:
+                f.write(token)
+            os.chmod(token_file, 0o600)
+            self.status_var.set("Token已保存")
+        except Exception as e:
+            messagebox.showerror("错误", f"保存Token失败: {e}")
+
+    def _market_refresh(self):
+        self.status_var.set("正在加载脚本市场...")
+        threading.Thread(target=self._do_market_refresh, daemon=True).start()
+
+    def _do_market_refresh(self):
+        scripts = mp.search_scripts()
+        self.root.after(0, self._update_market_tree, scripts)
+
+    def _market_search(self):
+        keyword = self.market_search_var.get().strip()
+        self.status_var.set(f"搜索: {keyword}...")
+        threading.Thread(target=self._do_market_search, args=(keyword,), daemon=True).start()
+
+    def _do_market_search(self, keyword):
+        scripts = mp.search_scripts(keyword)
+        self.root.after(0, self._update_market_tree, scripts)
+
+    def _update_market_tree(self, scripts):
+        for item in self.market_tree.get_children():
+            self.market_tree.delete(item)
+        for s in scripts:
+            self.market_tree.insert("", tk.END, values=(
+                s.get("name", ""),
+                s.get("author", ""),
+                ", ".join(s.get("tags", [])),
+                s.get("step_count", ""),
+                s.get("description", ""),
+            ))
+        self.status_var.set(f"市场: {len(scripts)} 个脚本")
+
+    def _get_selected_market_script(self):
+        sel = self.market_tree.selection()
+        if not sel:
+            messagebox.showwarning("提示", "请先选择一个脚本")
+            return None
+        item = self.market_tree.item(sel[0])
+        name = item["values"][0]
+        index = mp.get_index()
+        if not index:
+            return None
+        for s in index.get("scripts", []):
+            if s.get("name") == name:
+                return s
+        return None
+
+    def _market_download(self):
+        entry = self._get_selected_market_script()
+        if not entry:
+            return
+        self.status_var.set(f"下载中: {entry.get('name', '')}...")
+        threading.Thread(target=self._do_market_download, args=(entry,), daemon=True).start()
+
+    def _do_market_download(self, entry):
+        data = mp.download_script(entry)
+        if not data:
+            self.root.after(0, lambda: messagebox.showerror("错误", "下载失败"))
+            return
+        name = entry.get("name", "downloaded")
+        self.sm.save(name, data.get("events", []), data.get("meta"))
+        self.root.after(0, self._after_market_download, name)
+
+    def _after_market_download(self, name):
+        self._refresh_scripts()
+        self.status_var.set(f"已下载: {name}")
+        messagebox.showinfo("成功", f"脚本 '{name}' 已下载到本地")
+
+    def _market_merge(self):
+        entry = self._get_selected_market_script()
+        if not entry:
+            return
+        name = entry.get("name", "")
+        local_data = self.sm.load(name)
+        if not local_data:
+            self._market_download()
+            return
+        self.status_var.set(f"合并中: {name}...")
+        threading.Thread(target=self._do_market_merge, args=(entry, name, local_data), daemon=True).start()
+
+    def _do_market_merge(self, entry, name, local_data):
+        remote_data = mp.download_script(entry)
+        if not remote_data:
+            self.root.after(0, lambda: messagebox.showerror("错误", "下载远程脚本失败"))
+            return
+        merged, added, enhanced = mp.merge_scripts(local_data, remote_data)
+        self.sm.save(name, merged.get("events", []), merged.get("meta"))
+        self.root.after(0, self._after_market_merge, name, added, enhanced)
+
+    def _after_market_merge(self, name, added, enhanced):
+        self._refresh_scripts()
+        self.status_var.set(f"已合并: {name} (+{added}步, 增强{enhanced}处)")
+        messagebox.showinfo("合并完成", f"脚本 '{name}' 已合并\n新增 {added} 步\n增强 {enhanced} 处")
+
+    def _market_detail(self):
+        entry = self._get_selected_market_script()
+        if not entry:
+            return
+        name = entry.get("name", "")
+        local_data = self.sm.load(name)
+        local_fp = mp.compute_fingerprint(local_data) if local_data else None
+        remote_fp = {"step_count": entry.get("step_count", 0)}
+        detail = f"脚本: {name}\n"
+        detail += f"作者: {entry.get('author', '')}\n"
+        detail += f"标签: {', '.join(entry.get('tags', []))}\n"
+        detail += f"描述: {entry.get('description', '')}\n"
+        detail += f"目标应用: {entry.get('target_app', '')}\n"
+        detail += f"远程步骤数: {entry.get('step_count', '?')}\n"
+        if local_fp:
+            detail += f"\n--- 本地对比 ---\n"
+            detail += f"本地步骤: {local_fp['step_count']}\n"
+            detail += f"OCR覆盖率: {local_fp['ocr_coverage']:.0%}\n"
+            detail += f"模板覆盖率: {local_fp['template_coverage']:.0%}\n"
+            score = mp.compare_fingerprints(local_fp, remote_fp)
+            if score > 0:
+                detail += f"\n💡 远程脚本更优（+{score}分），建议合并"
+            else:
+                detail += f"\n✅ 本地脚本已足够完善"
+        messagebox.showinfo("脚本详情", detail)
+
+    def _share_script(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("提示", "请先选择一个脚本")
+            return
+        item = self.tree.item(sel[0])
+        name = item["values"][0]
+        if not self.token_var.get().strip():
+            messagebox.showwarning("提示", "请先在「市场」标签页设置GitHub Token")
+            return
+        data = self.sm.load(name)
+        if not data:
+            return
+        data["name"] = name
+        tags_str = _ask_string(self.root, "共享", "输入标签(逗号分隔):", initialvalue="") or ""
+        if tags_str:
+            if "meta" not in data:
+                data["meta"] = {}
+            data["meta"]["tags"] = [t.strip() for t in tags_str.split(",") if t.strip()]
+        self.status_var.set(f"上传中: {name}...")
+        threading.Thread(target=self._do_share, args=(name, data), daemon=True).start()
+
+    def _do_share(self, name, data):
+        result = mp.upload_script(data, token=self.token_var.get().strip())
+        if result:
+            self.root.after(0, self._after_share, name, result)
+        else:
+            self.root.after(0, lambda: messagebox.showerror("错误", "上传失败，请检查Token"))
+
+    def _after_share(self, name, result):
+        self.status_var.set(f"已共享: {name}")
+        messagebox.showinfo("共享成功", f"脚本 '{name}' 已上传\n\nGist链接:\n{result['gist_url']}")
 
 
 def main():
