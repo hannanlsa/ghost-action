@@ -35,9 +35,12 @@ GhostAction 不局限于特定应用或特定场景，其设计目标是**操作
 
 ## 跨平台
 
-当前版本支持 **macOS**。**Windows 版本正在规划中**，将在 macOS 版本稳定后启动开发。
+支持 **macOS** 和 **Windows**。两个平台共享相同的核心设计理念（多模态识别 + 数据驱动 + 点选构建），底层事件注入和窗口管理适配各平台原生 API。
 
-两个平台共享相同的核心设计理念（多模态识别 + 数据驱动 + 点选构建），底层事件注入和窗口管理适配各平台原生 API。
+| 平台 | 事件注入 | 窗口管理 | OCR |
+|------|---------|---------|-----|
+| macOS | CGEventTap / CGEventPost | NSWorkspace / Accessibility | Tesseract |
+| Windows | SetWindowsHookEx / SendInput | EnumWindows / SetForegroundWindow | Tesseract |
 
 ## Quick Start
 
@@ -47,6 +50,12 @@ GhostAction 不局限于特定应用或特定场景，其设计目标是**操作
 2. Drag to Applications
 3. Open (right-click → Open on first launch)
 4. Grant Accessibility & Screen Recording permissions when prompted
+
+### Windows
+
+1. Download latest `GhostAction-Windows.exe` from [Releases](https://github.com/hannanlsa/ghost-action/releases)
+2. Double-click to run (no installation needed)
+3. If Windows SmartScreen blocks it, click "More info" → "Run anyway"
 
 ### From Source
 
@@ -89,10 +98,9 @@ GhostAction 的通用性设计覆盖了广泛的应用场景，但**不保证对
 
 ## Requirements
 
-- macOS 12+ (Monterey or later)
-- Python 3.10+ (bundled in DMG)
-- Accessibility permission (System Settings → Privacy & Security)
-- Screen Recording permission (for visual matching)
+- **macOS**: macOS 12+ (Monterey or later), Accessibility & Screen Recording permissions
+- **Windows**: Windows 10/11 64-bit
+- Python 3.10+ (bundled in DMG/EXE, or from source)
 
 ## License
 
