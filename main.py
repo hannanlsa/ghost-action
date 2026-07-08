@@ -8,7 +8,8 @@ import time
 import faulthandler
 import traceback
 
-faulthandler.enable()
+if hasattr(sys, 'stderr') and sys.stderr is not None:
+    faulthandler.enable()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGS_DIR = os.path.join(os.path.expanduser("~"), "GhostAction", "logs")
@@ -38,16 +39,17 @@ def setup_logging():
     crash_fh.setFormatter(formatter)
     crash_fh.setLevel(logging.CRITICAL)
 
-    console = logging.StreamHandler(sys.stderr)
-    console.setFormatter(formatter)
-    console.setLevel(logging.INFO)
-
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
     root.addHandler(fh)
     root.addHandler(eh)
     root.addHandler(crash_fh)
-    root.addHandler(console)
+
+    if sys.stderr is not None:
+        console = logging.StreamHandler(sys.stderr)
+        console.setFormatter(formatter)
+        console.setLevel(logging.INFO)
+        root.addHandler(console)
 
     for name in ["recorder", "player", "gui", "accessibility"]:
         logging.getLogger(name).setLevel(logging.DEBUG)
