@@ -5,7 +5,10 @@ import subprocess
 import threading
 import ctypes
 import ctypes.wintypes
-from ctypes import windll, byref, sizeof, Structure, POINTER
+from ctypes import windll, byref, sizeof, Structure, POINTER, c_uint64
+
+if not hasattr(ctypes.wintypes, 'ULONG_PTR'):
+    ctypes.wintypes.ULONG_PTR = c_uint64
 
 logger = logging.getLogger("win_player")
 
