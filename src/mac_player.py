@@ -393,6 +393,80 @@ class MacPlayer:
                     i += 1
                     continue
 
+                if etype == "ai_recognize":
+                    var_name = event.get("variable", "")
+                    prompt = event.get("prompt", "请识别图中的验证码，只输出验证码内容")
+                    target = event.get("target", "验证码")
+                    result = None
+                    try:
+                        import ai_recognizer as ai
+                        region = event.get("region")
+                        if region and region != "自动截图":
+                            result = ai.recognize_captcha(region=None, prompt=prompt)
+                        else:
+                            tmp_path = os.path.join(os.path.expanduser("~"), "GhostAction", "tmp_ai_capture.png")
+                            os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
+                            with mss.MSS() as sct:
+                                screenshot = sct.grab(sct.monitors[1])
+                                from PIL import Image as PILImage
+                                img = PILImage.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                                img.save(tmp_path)
+                            result = ai.recognize_captcha(image_path=tmp_path, prompt=prompt)
+                            try:
+                                os.remove(tmp_path)
+                            except Exception:
+                                pass
+                    except ImportError:
+                        logger.warning("ai_recognizer模块不可用")
+                    except Exception as e:
+                        logger.error("AI识别异常: %s", e)
+                    if result:
+                        self._variables[var_name] = result
+                        logger.info("AI识别成功: %s = %s", var_name, result)
+                        self._execution_log.append({"step": i, "type": "ai_recognize", "status": "ok", "variable": var_name, "result": result})
+                    else:
+                        logger.warning("AI识别失败: %s", target)
+                        self._execution_log.append({"step": i, "type": "ai_recognize", "status": "fail", "variable": var_name})
+                        if not event.get("fallback_manual", True):
+                            self._variables[var_name] = ""
+                    i += 1
+                    continue
+
+                if etype == "wait_manual":
+                    desc = event.get("description", "请手动操作后继续")
+                    var_name = event.get("variable", "")
+                    logger.info("等待人工: %s", desc)
+                    self._execution_log.append({"step": i, "type": "wait_manual", "status": "waiting", "description": desc})
+                    manual_file = os.path.join(os.path.expanduser("~"), "GhostAction", "manual_signal.txt")
+                    try:
+                        os.makedirs(os.path.dirname(manual_file), exist_ok=True)
+                        if os.path.exists(manual_file):
+                            os.remove(manual_file)
+                    except Exception:
+                        pass
+                    wait_timeout = 120
+                    start = time.time()
+                    while time.time() - start < wait_timeout:
+                        if self._stop:
+                            break
+                        self._paused.wait()
+                        if os.path.exists(manual_file):
+                            try:
+                                with open(manual_file, "r", encoding="utf-8") as f:
+                                    content = f.read().strip()
+                                if content:
+                                    if var_name:
+                                        self._variables[var_name] = content
+                                        logger.info("人工输入: %s = %s", var_name, content)
+                                    os.remove(manual_file)
+                                    break
+                            except Exception:
+                                pass
+                        time.sleep(0.5)
+                    self._execution_log.append({"step": i, "type": "wait_manual", "status": "ok"})
+                    i += 1
+                    continue
+
                 step_delay = {
                     "mouse_down": 0.3, "mouse_up": 0.05, "mouse_drag": 0.3,
                     "key_down": 0.1, "key_up": 0.05, "scroll": 0.3,
@@ -559,6 +633,10 @@ class MacPlayer:
         elif etype == "call_script":
             pass
         elif etype == "comment":
+            pass
+        elif etype == "ai_recognize":
+            pass
+        elif etype == "wait_manual":
             pass
 
     def _do_mouse_down(self, event, pid=None):

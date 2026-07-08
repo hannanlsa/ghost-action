@@ -190,6 +190,12 @@ def _human_event_detail(e, scripts_dir=""):
         return f"调用脚本「{e.get('script_name', '')}」"
     elif etype == "comment":
         return f"💬 {e.get('text', '')}"
+    elif etype == "ai_recognize":
+        target = e.get("target", "验证码")
+        var = e.get("variable", "")
+        return f"🤖 AI识别{target}" + (f" → {var}" if var else "")
+    elif etype == "wait_manual":
+        return f"⏸ 等待人工: {e.get('description', '请手动操作后继续')}"
     return etype
 
 
@@ -337,6 +343,8 @@ class AutoRepeatApp:
         ttk.Button(btn_row2, text="➕点选添加", command=self._editor_pick_element, width=9).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row2, text="🔗变量", command=self._editor_bind_variable, width=6).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row2, text="📊数据源", command=self._editor_set_data_source, width=7).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="🤖AI识别", command=self._editor_insert_ai_recognize, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="⚙️AI设置", command=self._show_ai_settings, width=8).pack(side=tk.LEFT, padx=2)
 
         tree_frame = ttk.Frame(self.editor_tab)
         tree_frame.pack(fill=tk.BOTH, expand=True)
@@ -903,7 +911,7 @@ class AutoRepeatApp:
                 "wait_for": "⏳", "assert_that": "✅", "activate": "🪟",
                 "if": "🔀", "endif": "🔚", "for": "🔁", "endfor": "🔚",
                 "while": "🔁", "endwhile": "🔚", "set_variable": "📝",
-                "call_script": "📞", "comment": "💬",
+                "call_script": "📞", "comment": "💬", "ai_recognize": "🤖", "wait_manual": "⏸",
             }
             icon = icon_map.get(etype, "•")
 
@@ -1089,6 +1097,181 @@ class AutoRepeatApp:
         ev = {"type": "comment", "text": text, "time": 0}
         self._current_events.insert(idx, ev)
         self._populate_editor()
+
+    def _editor_insert_ai_recognize(self):
+        if not self._current_script_name:
+            self._new_script()
+            if not self._current_script_name:
+                return
+
+        top = tk.Toplevel(self.root)
+        top.title("🤖 添加AI识别步骤")
+        top.geometry("450x350")
+        top.transient(self.root)
+        top.grab_set()
+
+        frm = ttk.Frame(top, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="AI识别步骤：截图指定区域→调用大模型识别→结果存入变量", font=("", 10, "bold"), wraplength=420).pack(anchor="w", pady=(0, 8))
+
+        row1 = ttk.Frame(frm)
+        row1.pack(fill=tk.X, pady=4)
+        ttk.Label(row1, text="识别目标:").pack(side=tk.LEFT, padx=(0, 4))
+        target_var = tk.StringVar(value="验证码")
+        ttk.Combobox(row1, textvariable=target_var, values=["验证码", "文字", "数字", "图形"], width=12, state="readonly").pack(side=tk.LEFT)
+
+        row2 = ttk.Frame(frm)
+        row2.pack(fill=tk.X, pady=4)
+        ttk.Label(row2, text="结果存入变量:").pack(side=tk.LEFT, padx=(0, 4))
+        var_name = tk.StringVar(value="captcha_result")
+        ttk.Entry(row2, textvariable=var_name, width=20).pack(side=tk.LEFT)
+
+        row3 = ttk.Frame(frm)
+        row3.pack(fill=tk.X, pady=4)
+        ttk.Label(row3, text="识别区域:").pack(side=tk.LEFT, padx=(0, 4))
+        region_var = tk.StringVar(value="自动截图")
+        region_combo = ttk.Combobox(row3, textvariable=region_var, values=["自动截图", "手动指定区域"], width=15, state="readonly")
+        region_combo.pack(side=tk.LEFT)
+
+        row4 = ttk.Frame(frm)
+        row4.pack(fill=tk.X, pady=4)
+        ttk.Label(row4, text="自定义提示词:").pack(side=tk.LEFT, padx=(0, 4))
+        prompt_var = tk.StringVar(value="")
+        prompt_entry = ttk.Entry(row4, textvariable=prompt_var, width=30)
+        prompt_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row5 = ttk.Frame(frm)
+        row5.pack(fill=tk.X, pady=4)
+        manual_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(row5, text="AI失败时回退到人工接管", variable=manual_var).pack(anchor="w")
+
+        def _confirm():
+            idx = self._get_selected_event_idx()
+            target = target_var.get()
+            var = var_name.get().strip()
+            if not var:
+                messagebox.showwarning("提示", "请输入变量名", parent=top)
+                return
+            prompt = prompt_var.get().strip() or f"请识别图中的{target}，只输出{target}内容，不要输出其他文字"
+            ev = {
+                "type": "ai_recognize",
+                "target": target,
+                "variable": var,
+                "prompt": prompt,
+                "region": region_var.get(),
+                "fallback_manual": manual_var.get(),
+                "time": 0,
+            }
+            self._current_events.insert(idx, ev)
+            if manual_var.get():
+                wait_ev = {
+                    "type": "wait_manual",
+                    "description": f"如果AI识别{target}失败，请手动输入后点击继续",
+                    "variable": var,
+                    "time": 0,
+                }
+                self._current_events.insert(idx + 1, wait_ev)
+            self._populate_editor()
+            self.status_var.set(f"已添加AI识别步骤: {target} → {var}")
+            top.destroy()
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(btn_frm, text="添加", command=_confirm, width=8).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(btn_frm, text="取消", command=top.destroy, width=8).pack(side=tk.RIGHT)
+
+    def _show_ai_settings(self):
+        import ai_recognizer as ai
+        config = ai.load_config()
+
+        top = tk.Toplevel(self.root)
+        top.title("⚙️ AI模型设置")
+        top.geometry("550x500")
+        top.transient(self.root)
+        top.grab_set()
+
+        frm = ttk.Frame(top, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="配置大模型API Key，用于验证码识别等AI功能", font=("", 10, "bold"), wraplength=500).pack(anchor="w", pady=(0, 8))
+
+        providers = config.get("providers", {})
+        key_entries = {}
+
+        for provider_key in ["zhipu", "deepseek", "dashscope"]:
+            provider_names = {"zhipu": "智谱 (GLM)", "deepseek": "DeepSeek", "dashscope": "通义千问 (Qwen)"}
+            pf = ttk.LabelFrame(frm, text=provider_names.get(provider_key, provider_key), padding=6)
+            pf.pack(fill=tk.X, pady=4)
+
+            kf = ttk.Frame(pf)
+            kf.pack(fill=tk.X)
+            ttk.Label(kf, text="API Key:").pack(side=tk.LEFT, padx=(0, 4))
+            key_var = tk.StringVar(value=providers.get(provider_key, {}).get("api_key", ""))
+            entry = ttk.Entry(kf, textvariable=key_var, width=40, show="*")
+            entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            key_entries[provider_key] = key_var
+
+            show_var = tk.BooleanVar(value=False)
+            def _toggle(e=entry, v=key_var, sv=show_var):
+                if sv.get():
+                    e.configure(show="")
+                else:
+                    e.configure(show="*")
+            ttk.Checkbutton(kf, text="显示", variable=show_var, command=_toggle).pack(side=tk.LEFT, padx=4)
+
+            enabled_var = tk.BooleanVar(value=providers.get(provider_key, {}).get("enabled", True))
+            ttk.Checkbutton(pf, text="启用", variable=enabled_var).pack(anchor="w")
+            key_entries[f"{provider_key}_enabled"] = enabled_var
+
+        model_frame = ttk.LabelFrame(frm, text="默认模型", padding=6)
+        model_frame.pack(fill=tk.X, pady=4)
+
+        vmf = ttk.Frame(model_frame)
+        vmf.pack(fill=tk.X, pady=2)
+        ttk.Label(vmf, text="视觉模型:").pack(side=tk.LEFT, padx=(0, 4))
+        vision_models = [k for k, v in ai.MODEL_REGISTRY.items() if "vision" in v["capabilities"]]
+        vision_var = tk.StringVar(value=config.get("vision_model", "glm-4v-flash"))
+        ttk.Combobox(vmf, textvariable=vision_var, values=vision_models, width=20, state="readonly").pack(side=tk.LEFT)
+
+        tmf = ttk.Frame(model_frame)
+        tmf.pack(fill=tk.X, pady=2)
+        ttk.Label(tmf, text="文本模型:").pack(side=tk.LEFT, padx=(0, 4))
+        text_models = [k for k, v in ai.MODEL_REGISTRY.items() if "text" in v["capabilities"]]
+        text_var = tk.StringVar(value=config.get("text_model", "deepseek-chat"))
+        ttk.Combobox(tmf, textvariable=text_var, values=text_models, width=20, state="readonly").pack(side=tk.LEFT)
+
+        status_var = tk.StringVar(value="")
+        ttk.Label(frm, textvariable=status_var, foreground="#2563eb").pack(anchor="w", pady=4)
+
+        def _test():
+            model_key = vision_var.get()
+            provider_map = {"glm": "zhipu", "deepseek": "deepseek", "qwen": "dashscope"}
+            api_key = ""
+            for prefix, prov in provider_map.items():
+                if model_key.startswith(prefix):
+                    api_key = key_entries.get(prov, tk.StringVar()).get()
+                    break
+            ok, msg = ai.test_connection(model_key, api_key)
+            status_var.set(f"{'✅' if ok else '❌'} {msg}")
+
+        def _save():
+            for provider_key in ["zhipu", "deepseek", "dashscope"]:
+                if provider_key not in config["providers"]:
+                    config["providers"][provider_key] = {}
+                config["providers"][provider_key]["api_key"] = key_entries[provider_key].get()
+                config["providers"][provider_key]["enabled"] = key_entries[f"{provider_key}_enabled"].get()
+            config["vision_model"] = vision_var.get()
+            config["text_model"] = text_var.get()
+            ai.save_config(config)
+            status_var.set("✅ 设置已保存")
+            self.status_var.set("AI设置已保存")
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(btn_frm, text="测试连接", command=_test, width=10).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frm, text="保存", command=_save, width=8).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(btn_frm, text="关闭", command=top.destroy, width=8).pack(side=tk.RIGHT)
 
     def _editor_pick_element(self):
         if not self._current_script_name:
