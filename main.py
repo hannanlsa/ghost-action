@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""昨日重现 - 示教再现RPA工具"""
+"""GhostAction - 通用桌面RPA自动化工具"""
 import os
 import sys
 import logging
@@ -11,7 +11,7 @@ import traceback
 faulthandler.enable()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGS_DIR = os.path.join(os.path.expanduser("~"), "昨日重现", "logs")
+LOGS_DIR = os.path.join(os.path.expanduser("~"), "GhostAction", "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 sys.path.insert(0, os.path.join(BASE_DIR, "src"))
@@ -53,7 +53,7 @@ def setup_logging():
         logging.getLogger(name).setLevel(logging.DEBUG)
 
     logging.info("=" * 60)
-    logging.info("昨日重现 启动")
+    logging.info("GhostAction 启动")
     logging.info("PID=%d CWD=%s", os.getpid(), BASE_DIR)
     logging.info("=" * 60)
 
@@ -86,4 +86,4 @@ if __name__ == "__main__":
         logging.critical("主循环崩溃: %s", e, exc_info=True)
         sys.exit(1)
     finally:
-        logging.info("昨日重现 退出")
+        logging.info("GhostAction 退出")

@@ -196,7 +196,7 @@ def _human_event_detail(e, scripts_dir=""):
 class AutoRepeatApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("昨日重现")
+        self.root.title("GhostAction")
         self.root.geometry("900x700")
         self.root.resizable(True, True)
 
@@ -211,7 +211,7 @@ class AutoRepeatApp:
         self._window_list = []
         self._current_script_name = None
         self._current_events = []
-        self._scripts_dir = os.path.join(os.path.expanduser("~"), "昨日重现")
+        self._scripts_dir = os.path.join(os.path.expanduser("~"), "GhostAction")
         self._pid_name_map = {}
 
         self._build_ui()

@@ -3,7 +3,7 @@ import os
 import time
 
 
-_USER_DATA_DIR = os.path.join(os.path.expanduser("~"), "昨日重现")
+_USER_DATA_DIR = os.path.join(os.path.expanduser("~"), "GhostAction")
 SCRIPTS_DIR = os.path.join(_USER_DATA_DIR, "scripts")
 
 
