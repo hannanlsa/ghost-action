@@ -1187,76 +1187,87 @@ class AutoRepeatApp:
 
         top = tk.Toplevel(self.root)
         top.title("⚙️ AI模型设置")
-        top.geometry("550x500")
+        top.geometry("600x650")
         top.transient(self.root)
         top.grab_set()
 
-        frm = ttk.Frame(top, padding=12)
-        frm.pack(fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(top)
+        scrollbar = ttk.Scrollbar(top, orient=tk.VERTICAL, command=canvas.yview)
+        scroll_frame = ttk.Frame(canvas, padding=12)
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        ttk.Label(frm, text="配置大模型API Key，用于验证码识别等AI功能", font=("", 10, "bold"), wraplength=500).pack(anchor="w", pady=(0, 8))
+        frm = scroll_frame
+
+        ttk.Label(frm, text="配置大模型API Key，用于验证码识别等AI功能", font=("", 10, "bold"), wraplength=550).pack(anchor="w", pady=(0, 4))
+        ttk.Label(frm, text="默认搭载免费模型，配置Key即可使用；可升级付费模型", foreground="#666").pack(anchor="w", pady=(0, 8))
 
         providers = config.get("providers", {})
         key_entries = {}
+        all_providers = list(ai.PROVIDER_CONFIG.keys())
 
-        for provider_key in ["zhipu", "deepseek", "dashscope"]:
-            provider_names = {"zhipu": "智谱 (GLM)", "deepseek": "DeepSeek", "dashscope": "通义千问 (Qwen)"}
-            pf = ttk.LabelFrame(frm, text=provider_names.get(provider_key, provider_key), padding=6)
-            pf.pack(fill=tk.X, pady=4)
+        for provider_key in all_providers:
+            pinfo = ai.PROVIDER_CONFIG[provider_key]
+            pf = ttk.LabelFrame(frm, text=pinfo["name"], padding=4)
+            pf.pack(fill=tk.X, pady=2)
 
             kf = ttk.Frame(pf)
             kf.pack(fill=tk.X)
             ttk.Label(kf, text="API Key:").pack(side=tk.LEFT, padx=(0, 4))
             key_var = tk.StringVar(value=providers.get(provider_key, {}).get("api_key", ""))
-            entry = ttk.Entry(kf, textvariable=key_var, width=40, show="*")
+            entry = ttk.Entry(kf, textvariable=key_var, width=35, show="*")
             entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
             key_entries[provider_key] = key_var
 
             show_var = tk.BooleanVar(value=False)
-            def _toggle(e=entry, v=key_var, sv=show_var):
-                if sv.get():
-                    e.configure(show="")
-                else:
-                    e.configure(show="*")
+            def _toggle(e=entry, sv=show_var):
+                e.configure(show="" if sv.get() else "*")
             ttk.Checkbutton(kf, text="显示", variable=show_var, command=_toggle).pack(side=tk.LEFT, padx=4)
 
             enabled_var = tk.BooleanVar(value=providers.get(provider_key, {}).get("enabled", True))
-            ttk.Checkbutton(pf, text="启用", variable=enabled_var).pack(anchor="w")
+            ttk.Checkbutton(pf, text="启用", variable=enabled_var).pack(side=tk.LEFT)
             key_entries[f"{provider_key}_enabled"] = enabled_var
 
-        model_frame = ttk.LabelFrame(frm, text="默认模型", padding=6)
+            models_for_provider = [f"  {v['name']} ({'免费' if v['free'] else '付费'}) - {v['description']}" for k, v in ai.MODEL_REGISTRY.items() if v["provider"] == provider_key]
+            if models_for_provider:
+                ttk.Label(pf, text="\n".join(models_for_provider), foreground="#888", font=("", 8), wraplength=500, justify=tk.LEFT).pack(anchor="w", pady=(2, 0))
+
+        model_frame = ttk.LabelFrame(frm, text="默认模型选择", padding=6)
         model_frame.pack(fill=tk.X, pady=4)
 
         vmf = ttk.Frame(model_frame)
         vmf.pack(fill=tk.X, pady=2)
-        ttk.Label(vmf, text="视觉模型:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Label(vmf, text="🤖 图形识别模型:").pack(side=tk.LEFT, padx=(0, 4))
         vision_models = [k for k, v in ai.MODEL_REGISTRY.items() if "vision" in v["capabilities"]]
         vision_var = tk.StringVar(value=config.get("vision_model", "glm-4v-flash"))
-        ttk.Combobox(vmf, textvariable=vision_var, values=vision_models, width=20, state="readonly").pack(side=tk.LEFT)
+        ttk.Combobox(vmf, textvariable=vision_var, values=vision_models, width=22, state="readonly").pack(side=tk.LEFT)
 
         tmf = ttk.Frame(model_frame)
         tmf.pack(fill=tk.X, pady=2)
-        ttk.Label(tmf, text="文本模型:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Label(tmf, text="📝 文本推理模型:").pack(side=tk.LEFT, padx=(0, 4))
         text_models = [k for k, v in ai.MODEL_REGISTRY.items() if "text" in v["capabilities"]]
         text_var = tk.StringVar(value=config.get("text_model", "deepseek-chat"))
-        ttk.Combobox(tmf, textvariable=text_var, values=text_models, width=20, state="readonly").pack(side=tk.LEFT)
+        ttk.Combobox(tmf, textvariable=text_var, values=text_models, width=22, state="readonly").pack(side=tk.LEFT)
 
         status_var = tk.StringVar(value="")
         ttk.Label(frm, textvariable=status_var, foreground="#2563eb").pack(anchor="w", pady=4)
 
         def _test():
             model_key = vision_var.get()
-            provider_map = {"glm": "zhipu", "deepseek": "deepseek", "qwen": "dashscope"}
-            api_key = ""
-            for prefix, prov in provider_map.items():
-                if model_key.startswith(prefix):
-                    api_key = key_entries.get(prov, tk.StringVar()).get()
-                    break
+            model_info = ai.MODEL_REGISTRY.get(model_key)
+            if not model_info:
+                status_var.set("❌ 未知模型")
+                return
+            provider = model_info["provider"]
+            api_key = key_entries.get(provider, tk.StringVar()).get()
             ok, msg = ai.test_connection(model_key, api_key)
             status_var.set(f"{'✅' if ok else '❌'} {msg}")
 
         def _save():
-            for provider_key in ["zhipu", "deepseek", "dashscope"]:
+            for provider_key in all_providers:
                 if provider_key not in config["providers"]:
                     config["providers"][provider_key] = {}
                 config["providers"][provider_key]["api_key"] = key_entries[provider_key].get()

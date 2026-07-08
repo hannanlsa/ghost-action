@@ -9,50 +9,294 @@ logger = logging.getLogger("ai_recognizer")
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), "GhostAction", "ai_config.json")
 
 MODEL_REGISTRY = {
+    # === 智谱 (ZhipuAI) ===
     "glm-4v-flash": {
         "name": "GLM-4V Flash",
         "provider": "zhipu",
         "capabilities": ["vision", "text"],
         "free": True,
-        "api_base": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
         "model_id": "glm-4v-flash",
-        "description": "智谱免费视觉模型，擅长验证码/图表识别",
+        "description": "智谱免费视觉模型，擅长验证码/图表识别（默认图形识别）",
     },
     "glm-4v-plus": {
         "name": "GLM-4V Plus",
         "provider": "zhipu",
         "capabilities": ["vision", "text"],
         "free": False,
-        "api_base": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
         "model_id": "glm-4v-plus",
         "description": "智谱付费视觉模型，更强识别能力",
     },
+    "glm-4v": {
+        "name": "GLM-4V",
+        "provider": "zhipu",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "glm-4v",
+        "description": "智谱旗舰视觉模型",
+    },
+    "glm-4-flash": {
+        "name": "GLM-4 Flash",
+        "provider": "zhipu",
+        "capabilities": ["text"],
+        "free": True,
+        "model_id": "glm-4-flash",
+        "description": "智谱免费文本模型",
+    },
+    "glm-4-plus": {
+        "name": "GLM-4 Plus",
+        "provider": "zhipu",
+        "capabilities": ["text"],
+        "free": False,
+        "model_id": "glm-4-plus",
+        "description": "智谱付费文本模型",
+    },
+    # === DeepSeek ===
     "deepseek-chat": {
         "name": "DeepSeek Chat",
         "provider": "deepseek",
         "capabilities": ["text"],
         "free": True,
-        "api_base": "https://api.deepseek.com/chat/completions",
         "model_id": "deepseek-chat",
-        "description": "DeepSeek免费文本模型，擅长逻辑推理",
+        "description": "DeepSeek免费文本模型，擅长逻辑推理（默认文本）",
     },
     "deepseek-reasoner": {
         "name": "DeepSeek Reasoner",
         "provider": "deepseek",
         "capabilities": ["text"],
         "free": False,
-        "api_base": "https://api.deepseek.com/chat/completions",
         "model_id": "deepseek-reasoner",
-        "description": "DeepSeek付费推理模型",
+        "description": "DeepSeek付费推理模型(R1)",
     },
+    "deepseek-chat-pro": {
+        "name": "DeepSeek Chat Pro",
+        "provider": "deepseek",
+        "capabilities": ["text"],
+        "free": False,
+        "model_id": "deepseek-chat",
+        "description": "DeepSeek Pro版文本模型",
+    },
+    # === 通义千问 (Qwen/DashScope) ===
     "qwen-vl-plus": {
         "name": "Qwen-VL Plus",
         "provider": "dashscope",
         "capabilities": ["vision", "text"],
         "free": True,
-        "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         "model_id": "qwen-vl-plus",
         "description": "通义千问免费视觉模型",
+    },
+    "qwen-vl-max": {
+        "name": "Qwen-VL Max",
+        "provider": "dashscope",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "qwen-vl-max",
+        "description": "通义千问旗舰视觉模型",
+    },
+    "qwen-turbo": {
+        "name": "Qwen Turbo",
+        "provider": "dashscope",
+        "capabilities": ["text"],
+        "free": True,
+        "model_id": "qwen-turbo",
+        "description": "通义千问免费文本模型",
+    },
+    "qwen-plus": {
+        "name": "Qwen Plus",
+        "provider": "dashscope",
+        "capabilities": ["text"],
+        "free": False,
+        "model_id": "qwen-plus",
+        "description": "通义千问付费文本模型",
+    },
+    "qwen-max": {
+        "name": "Qwen Max",
+        "provider": "dashscope",
+        "capabilities": ["text"],
+        "free": False,
+        "model_id": "qwen-max",
+        "description": "通义千问旗舰文本模型",
+    },
+    # === 百度文心 (ERNIE/Baidu) ===
+    "ernie-4.0-8k": {
+        "name": "ERNIE 4.0 8K",
+        "provider": "baidu",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "ernie-4.0-8k",
+        "description": "百度文心4.0旗舰模型",
+    },
+    "ernie-3.5-8k": {
+        "name": "ERNIE 3.5 8K",
+        "provider": "baidu",
+        "capabilities": ["text"],
+        "free": True,
+        "model_id": "ernie-3.5-8k",
+        "description": "百度文心3.5免费模型",
+    },
+    "ernie-speed-8k": {
+        "name": "ERNIE Speed 8K",
+        "provider": "baidu",
+        "capabilities": ["text"],
+        "free": True,
+        "model_id": "ernie-speed-8k",
+        "description": "百度文心Speed免费模型",
+    },
+    # === 月之暗面 (Moonshot/Kimi) ===
+    "moonshot-v1-8k": {
+        "name": "Moonshot V1 8K",
+        "provider": "moonshot",
+        "capabilities": ["text"],
+        "free": True,
+        "model_id": "moonshot-v1-8k",
+        "description": "Kimi免费文本模型",
+    },
+    "moonshot-v1-32k": {
+        "name": "Moonshot V1 32K",
+        "provider": "moonshot",
+        "capabilities": ["text"],
+        "free": False,
+        "model_id": "moonshot-v1-32k",
+        "description": "Kimi付费长文本模型",
+    },
+    # === 讯飞星火 (Spark) ===
+    "spark-lite": {
+        "name": "Spark Lite",
+        "provider": "spark",
+        "capabilities": ["text"],
+        "free": True,
+        "model_id": "spark-lite",
+        "description": "讯飞星火免费模型",
+    },
+    "spark-pro": {
+        "name": "Spark Pro",
+        "provider": "spark",
+        "capabilities": ["text"],
+        "free": False,
+        "model_id": "spark-pro",
+        "description": "讯飞星火Pro模型",
+    },
+    "spark-max": {
+        "name": "Spark Max",
+        "provider": "spark",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "spark-max",
+        "description": "讯飞星火旗舰视觉模型",
+    },
+    # === OpenAI ===
+    "gpt-4o-mini": {
+        "name": "GPT-4o Mini",
+        "provider": "openai",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "gpt-4o-mini",
+        "description": "OpenAI轻量视觉模型",
+    },
+    "gpt-4o": {
+        "name": "GPT-4o",
+        "provider": "openai",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "gpt-4o",
+        "description": "OpenAI旗舰视觉模型",
+    },
+    "gpt-4-turbo": {
+        "name": "GPT-4 Turbo",
+        "provider": "openai",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "gpt-4-turbo",
+        "description": "OpenAI GPT-4 Turbo视觉模型",
+    },
+    "o1-mini": {
+        "name": "o1-mini",
+        "provider": "openai",
+        "capabilities": ["text"],
+        "free": False,
+        "model_id": "o1-mini",
+        "description": "OpenAI推理模型",
+    },
+    # === Google Gemini ===
+    "gemini-2.0-flash": {
+        "name": "Gemini 2.0 Flash",
+        "provider": "google",
+        "capabilities": ["vision", "text"],
+        "free": True,
+        "model_id": "gemini-2.0-flash",
+        "description": "Google免费视觉模型",
+    },
+    "gemini-2.0-pro": {
+        "name": "Gemini 2.0 Pro",
+        "provider": "google",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "gemini-2.0-pro",
+        "description": "Google旗舰视觉模型",
+    },
+    # === Claude (Anthropic) ===
+    "claude-3.5-sonnet": {
+        "name": "Claude 3.5 Sonnet",
+        "provider": "anthropic",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "claude-3-5-sonnet-20241022",
+        "description": "Anthropic旗舰视觉模型",
+    },
+    "claude-3-haiku": {
+        "name": "Claude 3 Haiku",
+        "provider": "anthropic",
+        "capabilities": ["vision", "text"],
+        "free": False,
+        "model_id": "claude-3-haiku-20240307",
+        "description": "Anthropic轻量视觉模型",
+    },
+}
+
+PROVIDER_CONFIG = {
+    "zhipu": {
+        "name": "智谱 (GLM)",
+        "api_base": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "signup_url": "https://open.bigmodel.cn/",
+    },
+    "deepseek": {
+        "name": "DeepSeek",
+        "api_base": "https://api.deepseek.com/chat/completions",
+        "signup_url": "https://platform.deepseek.com/",
+    },
+    "dashscope": {
+        "name": "通义千问 (Qwen)",
+        "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "signup_url": "https://dashscope.console.aliyun.com/",
+    },
+    "baidu": {
+        "name": "百度文心 (ERNIE)",
+        "api_base": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions",
+        "signup_url": "https://console.bce.baidu.com/qianfan/",
+    },
+    "moonshot": {
+        "name": "月之暗面 (Kimi)",
+        "api_base": "https://api.moonshot.cn/v1/chat/completions",
+        "signup_url": "https://platform.moonshot.cn/",
+    },
+    "spark": {
+        "name": "讯飞星火 (Spark)",
+        "api_base": "https://spark-api-open.xf-yun.com/v1/chat/completions",
+        "signup_url": "https://xinghuo.xfyun.cn/",
+    },
+    "openai": {
+        "name": "OpenAI",
+        "api_base": "https://api.openai.com/v1/chat/completions",
+        "signup_url": "https://platform.openai.com/",
+    },
+    "google": {
+        "name": "Google Gemini",
+        "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "signup_url": "https://aistudio.google.com/",
+    },
+    "anthropic": {
+        "name": "Anthropic (Claude)",
+        "api_base": "https://api.anthropic.com/v1/messages",
+        "signup_url": "https://console.anthropic.com/",
     },
 }
 
@@ -64,12 +308,11 @@ def load_config():
                 return json.load(f)
         except Exception:
             pass
+    default_providers = {}
+    for key, info in PROVIDER_CONFIG.items():
+        default_providers[key] = {"api_key": "", "enabled": True}
     return {
-        "providers": {
-            "zhipu": {"api_key": "", "enabled": True},
-            "deepseek": {"api_key": "", "enabled": True},
-            "dashscope": {"api_key": "", "enabled": True},
-        },
+        "providers": default_providers,
         "vision_model": "glm-4v-flash",
         "text_model": "deepseek-chat",
         "fallback_to_manual": True,
@@ -104,7 +347,7 @@ def _screenshot_region(x, y, w, h, save_path=None):
     return img
 
 
-def _call_zhipu(api_key, model_id, messages):
+def _call_openai_compatible(api_base, api_key, model_id, messages):
     import requests
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -116,97 +359,96 @@ def _call_zhipu(api_key, model_id, messages):
         "max_tokens": 512,
         "temperature": 0.1,
     }
-    resp = requests.post(
-        "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=30,
-    )
+    resp = requests.post(api_base, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
     data = resp.json()
     return data["choices"][0]["message"]["content"]
 
 
-def _call_deepseek(api_key, model_id, messages):
+def _call_anthropic(api_key, model_id, messages):
     import requests
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    system_text = ""
+    user_content = []
+    for msg in messages:
+        if msg["role"] == "user":
+            if isinstance(msg["content"], str):
+                user_content.append({"type": "text", "text": msg["content"]})
+            elif isinstance(msg["content"], list):
+                for part in msg["content"]:
+                    user_content.append(part)
+        elif msg["role"] == "system":
+            system_text = msg["content"]
     payload = {
         "model": model_id,
-        "messages": messages,
         "max_tokens": 512,
-        "temperature": 0.1,
+        "messages": [{"role": "user", "content": user_content}],
     }
-    resp = requests.post(
-        "https://api.deepseek.com/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=30,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"]
-
-
-def _call_dashscope(api_key, model_id, messages):
-    import requests
+    if system_text:
+        payload["system"] = system_text
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
     }
+    resp = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["content"][0]["text"]
+
+
+def _call_baidu(api_key, model_id, messages):
+    import requests
+    headers = {"Content-Type": "application/json"}
+    content_parts = []
+    for msg in messages:
+        if isinstance(msg.get("content"), str):
+            content_parts.append(msg["content"])
+        elif isinstance(msg.get("content"), list):
+            for part in msg["content"]:
+                if part.get("type") == "text":
+                    content_parts.append(part["text"])
     payload = {
         "model": model_id,
-        "messages": messages,
-        "max_tokens": 512,
-        "temperature": 0.1,
+        "messages": [{"role": "user", "content": " ".join(content_parts)}],
     }
     resp = requests.post(
-        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions_pro",
+        params={"access_token": api_key},
         headers=headers,
         json=payload,
         timeout=30,
     )
     resp.raise_for_status()
     data = resp.json()
-    return data["choices"][0]["message"]["content"]
+    return data.get("result", data.get("choices", [{}])[0].get("message", {}).get("content", ""))
+
+
+def _dispatch_call(provider, api_key, model_id, messages):
+    pconfig = PROVIDER_CONFIG.get(provider, {})
+    api_base = pconfig.get("api_base", "")
+
+    if provider == "anthropic":
+        return _call_anthropic(api_key, model_id, messages)
+    elif provider == "baidu":
+        return _call_baidu(api_key, model_id, messages)
+    else:
+        return _call_openai_compatible(api_base, api_key, model_id, messages)
 
 
 def _build_vision_messages(prompt, image_base64, model_info):
-    provider = model_info["provider"]
-    if provider in ("zhipu", "dashscope"):
-        return [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
-                ],
-            }
-        ]
-    elif provider == "deepseek":
-        return [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
-                ],
-            }
-        ]
-    return [{"role": "user", "content": prompt}]
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
+            ],
+        }
+    ]
 
 
 def _build_text_messages(prompt):
     return [{"role": "user", "content": prompt}]
-
-
-CALL_DISPATCH = {
-    "zhipu": _call_zhipu,
-    "deepseek": _call_deepseek,
-    "dashscope": _call_dashscope,
-}
 
 
 def recognize_captcha(image_path=None, region=None, prompt="请识别图中的验证码，只输出验证码内容，不要输出其他文字", config=None):
@@ -245,13 +487,8 @@ def recognize_captcha(image_path=None, region=None, prompt="请识别图中的�
 
     messages = _build_vision_messages(prompt, img_b64, model_info)
 
-    caller = CALL_DISPATCH.get(provider)
-    if not caller:
-        logger.error("不支持的服务商: %s", provider)
-        return None
-
     try:
-        result = caller(api_key, model_info["model_id"], messages)
+        result = _dispatch_call(provider, api_key, model_info["model_id"], messages)
         logger.info("AI识别结果: %s (模型: %s)", result, model_key)
         return result.strip()
     except Exception as e:
@@ -277,13 +514,8 @@ def recognize_text(prompt, config=None):
 
     messages = _build_text_messages(prompt)
 
-    caller = CALL_DISPATCH.get(provider)
-    if not caller:
-        logger.error("不支持的服务商: %s", provider)
-        return None
-
     try:
-        result = caller(api_key, model_info["model_id"], messages)
+        result = _dispatch_call(provider, api_key, model_info["model_id"], messages)
         logger.info("AI文本结果: %s (模型: %s)", result, model_key)
         return result.strip()
     except Exception as e:
@@ -296,14 +528,8 @@ def test_connection(model_key, api_key):
     if not model_info:
         return False, f"未知模型: {model_key}"
     provider = model_info["provider"]
-    caller = CALL_DISPATCH.get(provider)
-    if not caller:
-        return False, f"不支持的服务商: {provider}"
     try:
-        if "vision" in model_info["capabilities"]:
-            result = caller(api_key, model_info["model_id"], [{"role": "user", "content": "你好，请回复'连接成功'"}])
-        else:
-            result = caller(api_key, model_info["model_id"], [{"role": "user", "content": "你好，请回复'连接成功'"}])
+        result = _dispatch_call(provider, api_key, model_info["model_id"], [{"role": "user", "content": "你好，请回复'连接成功'"}])
         return True, f"连接成功: {result[:50]}"
     except Exception as e:
         return False, f"连接失败: {e}"
