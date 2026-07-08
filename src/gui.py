@@ -76,9 +76,9 @@ if IS_MAC:
     from mac_player import MacPlayer as Player
     from mac_recorder import get_visible_windows
 else:
-    from recorder import Recorder
-    from player import Player
-    get_visible_windows = None
+    from win_recorder import WinRecorder as Recorder
+    from win_player import WinPlayer as Player
+    from win_recorder import get_visible_windows
 
 from script_manager import ScriptManager
 
