@@ -240,6 +240,9 @@ class AutoRepeatApp:
 
         ttk.Separator(ctrl, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
 
+        self.btn_new = ttk.Button(ctrl, text="➕新建", command=self._new_script, width=8)
+        self.btn_new.pack(side=tk.LEFT, padx=(0, 6))
+
         self.speed_var = tk.DoubleVar(value=1.0)
         ttk.Label(ctrl, text="速度:").pack(side=tk.LEFT, padx=(0, 2))
         ttk.Spinbox(ctrl, from_=0.25, to=5.0, increment=0.25, textvariable=self.speed_var, width=5).pack(side=tk.LEFT)
@@ -316,23 +319,24 @@ class AutoRepeatApp:
         ttk.Button(filter_frame, text="合并连续点击", command=self._merge_clicks, width=12).pack(side=tk.LEFT, padx=4)
         ttk.Button(filter_frame, text="去除截图", command=self._remove_screenshots, width=10).pack(side=tk.LEFT, padx=4)
 
-        btn_row = ttk.Frame(self.editor_tab)
-        btn_row.pack(fill=tk.X, pady=(0, 4))
-        ttk.Button(btn_row, text="禁用/启用", command=self._editor_toggle_disable, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="删除", command=self._editor_delete_step, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="↑", command=lambda: self._editor_move(-1), width=3).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="↓", command=lambda: self._editor_move(1), width=3).pack(side=tk.LEFT, padx=2)
-        ttk.Separator(btn_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        ttk.Button(btn_row, text="等待", command=self._editor_insert_wait, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="断言", command=self._editor_insert_assert, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="循环", command=self._editor_insert_for, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="注释", command=self._editor_insert_comment, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Separator(btn_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        ttk.Button(btn_row, text="➕点选添加", command=self._editor_pick_element, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="🔗变量", command=self._editor_bind_variable, width=7).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="📊数据源", command=self._editor_set_data_source, width=8).pack(side=tk.LEFT, padx=2)
-        ttk.Separator(btn_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        ttk.Button(btn_row, text="💾 保存", command=self._editor_save, width=8).pack(side=tk.RIGHT, padx=2)
+        btn_row1 = ttk.Frame(self.editor_tab)
+        btn_row1.pack(fill=tk.X, pady=(0, 2))
+        ttk.Button(btn_row1, text="禁用/启用", command=self._editor_toggle_disable, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row1, text="删除", command=self._editor_delete_step, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row1, text="↑", command=lambda: self._editor_move(-1), width=3).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row1, text="↓", command=lambda: self._editor_move(1), width=3).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(btn_row1, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        ttk.Button(btn_row1, text="等待", command=self._editor_insert_wait, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row1, text="断言", command=self._editor_insert_assert, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row1, text="循环", command=self._editor_insert_for, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row1, text="注释", command=self._editor_insert_comment, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row1, text="💾保存", command=self._editor_save, width=6).pack(side=tk.RIGHT, padx=2)
+
+        btn_row2 = ttk.Frame(self.editor_tab)
+        btn_row2.pack(fill=tk.X, pady=(0, 4))
+        ttk.Button(btn_row2, text="➕点选添加", command=self._editor_pick_element, width=9).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="🔗变量", command=self._editor_bind_variable, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="📊数据源", command=self._editor_set_data_source, width=7).pack(side=tk.LEFT, padx=2)
 
         tree_frame = ttk.Frame(self.editor_tab)
         tree_frame.pack(fill=tk.BOTH, expand=True)
@@ -718,6 +722,22 @@ class AutoRepeatApp:
         name = item["values"][0]
         self._open_editor_for_script(name)
 
+    def _new_script(self):
+        name = _ask_string(self.root, "新建脚本", "脚本名称:")
+        if not name:
+            return
+        name = name.strip().replace(" ", "_")
+        existing = self.sm.load(name)
+        if existing:
+            messagebox.showwarning("提示", f"脚本 '{name}' 已存在")
+            self._open_editor_for_script(name)
+            return
+        self.sm.save(name, [], {"pid_names": {}, "clicks": 0, "keys": 0, "drags": 0, "duration": 0})
+        self._current_script_name = name
+        self._current_events = []
+        self._refresh_scripts()
+        self._open_editor_for_script(name)
+
     def _open_editor_for_script(self, name):
         data = self.sm.load(name)
         if not data:
@@ -1072,8 +1092,9 @@ class AutoRepeatApp:
 
     def _editor_pick_element(self):
         if not self._current_script_name:
-            messagebox.showwarning("提示", "请先加载脚本")
-            return
+            self._new_script()
+            if not self._current_script_name:
+                return
         self.status_var.set("🎯 点选模式：点击屏幕上的目标元素，按 Esc 取消...")
         self.root.iconify()
         self.root.update_idletasks()
