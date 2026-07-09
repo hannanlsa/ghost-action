@@ -315,6 +315,14 @@ class AutoRepeatApp:
         self.editor_title_var = tk.StringVar(value="未加载脚本")
         ttk.Label(top_frame, textvariable=self.editor_title_var, font=("", 11, "bold")).pack(side=tk.LEFT)
 
+        intent_frame = ttk.Frame(self.editor_tab)
+        intent_frame.pack(fill=tk.X, pady=(0, 2))
+        ttk.Label(intent_frame, text="🧠 意图:", font=("", 9)).pack(side=tk.LEFT, padx=(0, 4))
+        self.intent_var = tk.StringVar(value="")
+        self.intent_entry = ttk.Entry(intent_frame, textvariable=self.intent_var, width=60)
+        self.intent_entry.pack(side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True)
+        ttk.Button(intent_frame, text="🤖重新生成", command=self._regenerate_intent, width=10).pack(side=tk.LEFT, padx=2)
+
         filter_frame = ttk.Frame(self.editor_tab)
         filter_frame.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(filter_frame, text="只保留窗口:").pack(side=tk.LEFT, padx=(0, 4))
@@ -345,6 +353,8 @@ class AutoRepeatApp:
         ttk.Button(btn_row2, text="📊数据源", command=self._editor_set_data_source, width=7).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row2, text="🤖AI识别", command=self._editor_insert_ai_recognize, width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row2, text="⚙️AI设置", command=self._show_ai_settings, width=8).pack(side=tk.LEFT, padx=2)
+        self.ai_fallback_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(btn_row2, text="AI兜底", variable=self.ai_fallback_var).pack(side=tk.LEFT, padx=4)
 
         tree_frame = ttk.Frame(self.editor_tab)
         tree_frame.pack(fill=tk.BOTH, expand=True)
@@ -441,7 +451,18 @@ class AutoRepeatApp:
         logic_chain = self._build_logic_chain(events, pid_names)
         meta["logic_chain"] = logic_chain
 
-        self.sm.save(self.current_record_name, events, meta)
+        intent = ""
+        try:
+            import ai_recognizer
+            self.status_var.set("AI生成意图描述中...")
+            self.root.update_idletasks()
+            intent = ai_recognizer.generate_intent(events, meta)
+            if intent:
+                logger.info("AI意图: %s", intent[:80])
+        except Exception as e:
+            logger.warning("AI意图生成失败: %s", e)
+
+        self.sm.save(self.current_record_name, events, meta, intent=intent)
         self.btn_record.configure(text="● 识别")
         self.btn_play.configure(state=tk.NORMAL)
         self.status_var.set(f"识别完成 | {click_count}点击 {key_count}按键 {drag_count}拖拽")
@@ -627,7 +648,8 @@ class AutoRepeatApp:
             return
         self.player = Player(speed=speed, target_pid=target_pid, smart_replay=True,
                              visual_match=True, scripts_dir=self._scripts_dir,
-                             retry_count=3, on_error="continue")
+                             retry_count=3, on_error="continue",
+                             use_ai_fallback=self.ai_fallback_var.get())
         self.playing = True
         self.btn_play.configure(state=tk.DISABLED)
         self.btn_record.configure(state=tk.DISABLED)
@@ -754,6 +776,7 @@ class AutoRepeatApp:
         self._current_script_name = name
         self._current_events = data.get("events", [])
         self.editor_title_var.set(f"编辑: {name} ({len(self._current_events)} 步)")
+        self.intent_var.set(data.get("intent", ""))
 
         pid_names = data.get("meta", {}).get("pid_names", {})
         if not pid_names and get_visible_windows:
@@ -1696,9 +1719,32 @@ class AutoRepeatApp:
         if data:
             data["events"] = self._current_events
             data["event_count"] = len(self._current_events)
-            self.sm.save(self._current_script_name, self._current_events, data.get("meta"))
+            data["intent"] = self.intent_var.get()
+            self.sm.save(self._current_script_name, self._current_events, data.get("meta"), intent=data.get("intent", ""))
             self.status_var.set(f"已保存: {self._current_script_name}")
             self._refresh_scripts()
+
+    def _regenerate_intent(self):
+        if not self._current_script_name:
+            return
+        data = self.sm.load(self._current_script_name)
+        if not data:
+            return
+        events = data.get("events", [])
+        meta = data.get("meta", {})
+        self.status_var.set("AI重新生成意图描述中...")
+        self.root.update_idletasks()
+        try:
+            import ai_recognizer
+            intent = ai_recognizer.generate_intent(events, meta)
+            if intent:
+                self.intent_var.set(intent)
+                self.status_var.set("AI意图已生成")
+            else:
+                self.status_var.set("AI意图生成失败（未配置API Key？）")
+        except Exception as e:
+            logger.warning("AI意图重新生成失败: %s", e)
+            self.status_var.set(f"AI意图生成失败: {e}")
 
     def _check_permissions(self):
         if not IS_MAC:

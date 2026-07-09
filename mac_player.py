@@ -184,7 +184,7 @@ def template_match(template_path, threshold=TEMPLATE_MATCH_THRESHOLD, multi_scal
 
 class MacPlayer:
     def __init__(self, speed=1.0, target_pid=None, smart_replay=False, visual_match=False, scripts_dir=None,
-                 retry_count=3, retry_interval=1.0, global_timeout=300, on_error="retry"):
+                 retry_count=3, retry_interval=1.0, global_timeout=300, on_error="retry", use_ai_fallback=True):
         self.speed = speed
         self.target_pid = target_pid
         self.smart_replay = smart_replay
@@ -194,6 +194,7 @@ class MacPlayer:
         self.retry_interval = retry_interval
         self.global_timeout = global_timeout
         self.on_error = on_error
+        self.use_ai_fallback = use_ai_fallback
         self._stop = False
         self._paused = threading.Event()
         self._paused.set()
@@ -581,7 +582,64 @@ class MacPlayer:
                 logger.info("OCR锚点太短('%s'), 跳过OCR定位", target_text)
             logger.warning("OCR定位失败: '%s', 回退原始坐标", target_text)
 
+        if self.use_ai_fallback:
+            ai_coords = self._ai_locate(event)
+            if ai_coords:
+                return ai_coords
+
         return event["x"], event["y"]
+
+    def _ai_locate(self, event):
+        try:
+            import ai_recognizer
+        except ImportError:
+            return None
+
+        target_desc = ""
+        ax = event.get("ax_element", {})
+        if ax.get("AXTitle"):
+            target_desc = ax["AXTitle"]
+        elif ax.get("AXRoleDescription"):
+            target_desc = ax["AXRoleDescription"]
+        anchor = event.get("ocr_anchor", {})
+        if not target_desc and anchor.get("text"):
+            target_desc = anchor["text"]
+        if not target_desc:
+            return None
+
+        tmp_path = os.path.join(os.path.expanduser("~"), "GhostAction", "tmp_ai_locate.png")
+        try:
+            from Quartz import CGWindowListCreateImage, kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGRectNull
+            img_ref = CGWindowListCreateImage(CGRectNull, kCGWindowListOptionOnScreenOnly, kCGNullWindowID, 0)
+            if img_ref:
+                from PIL import Image
+                img = Image.frombytes("RGBA", (img_ref.getWidth(), img_ref.getHeight()), bytes(img_ref.getData()))
+                img.save(tmp_path)
+        except Exception:
+            try:
+                import subprocess
+                subprocess.run(["screencapture", "-x", tmp_path], capture_output=True, timeout=5)
+            except Exception:
+                return None
+
+        if not os.path.exists(tmp_path):
+            return None
+
+        try:
+            result = ai_recognizer.locate_on_screen(tmp_path, target_desc)
+            if result:
+                x, y = result
+                logger.info("AI兜底定位: 「%s」→ (%d, %d)", target_desc, x, y)
+                return x, y
+        except Exception as e:
+            logger.warning("AI兜底定位异常: %s", e)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        return None
 
     def _post_event(self, event_obj, pid=None):
 

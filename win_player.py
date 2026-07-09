@@ -5,7 +5,10 @@ import subprocess
 import threading
 import ctypes
 import ctypes.wintypes
-from ctypes import windll, byref, sizeof, Structure, POINTER
+from ctypes import windll, byref, sizeof, Structure, POINTER, c_uint64
+
+if not hasattr(ctypes.wintypes, 'ULONG_PTR'):
+    ctypes.wintypes.ULONG_PTR = c_uint64
 
 logger = logging.getLogger("win_player")
 
@@ -91,7 +94,6 @@ def _make_key_input(vk, flags=0):
 
 def _activate_app(pid):
     try:
-        hwnd = ctypes.wintypes.HWND()
         result = [None]
 
         def enum_cb(h, _):
@@ -233,7 +235,7 @@ def _paste_text(text):
 
 class WinPlayer:
     def __init__(self, speed=1.0, target_pid=None, smart_replay=False, visual_match=False, scripts_dir=None,
-                 retry_count=3, retry_interval=1.0, global_timeout=300, on_error="retry"):
+                 retry_count=3, retry_interval=1.0, global_timeout=300, on_error="retry", use_ai_fallback=True):
         self.speed = speed
         self.target_pid = target_pid
         self.smart_replay = smart_replay
@@ -243,6 +245,7 @@ class WinPlayer:
         self.retry_interval = retry_interval
         self.global_timeout = global_timeout
         self.on_error = on_error
+        self.use_ai_fallback = use_ai_fallback
         self._stop = False
         self._paused = threading.Event()
         self._paused.set()
@@ -341,8 +344,178 @@ class WinPlayer:
                 self._event_index = i
                 etype = event.get("type")
 
-                if etype in ("if", "endif", "for", "endfor", "while", "endwhile",
-                             "set_variable", "call_script", "comment", "ai_recognize", "wait_manual"):
+                if etype == "if":
+                    cond_met = self._check_condition(event)
+                    if not cond_met:
+                        depth = 1
+                        while i + 1 < len(events) and depth > 0:
+                            i += 1
+                            t = events[i].get("type", "")
+                            if t == "if":
+                                depth += 1
+                            elif t == "endif":
+                                depth -= 1
+                        i += 1
+                        continue
+                    i += 1
+                    continue
+
+                if etype == "endif":
+                    i += 1
+                    continue
+
+                if etype == "for":
+                    count = event.get("count", 1)
+                    var_name = event.get("variable", "_i")
+                    end_idx = self._find_end(events, i, "for", "endfor")
+                    if end_idx is None:
+                        i += 1
+                        continue
+                    body = events[i + 1:end_idx]
+                    for iteration in range(count):
+                        if self._stop:
+                            break
+                        self._variables[var_name] = iteration
+                        self.play(body, variables=self._variables, _recursive=True)
+                    i = end_idx + 1
+                    continue
+
+                if etype == "endfor":
+                    i += 1
+                    continue
+
+                if etype == "while":
+                    end_idx = self._find_end(events, i, "while", "endwhile")
+                    if end_idx is None:
+                        i += 1
+                        continue
+                    body = events[i + 1:end_idx]
+                    max_iter = event.get("max_iterations", 1000)
+                    iteration = 0
+                    while iteration < max_iter:
+                        if self._stop:
+                            break
+                        if not self._check_condition(event):
+                            break
+                        self.play(body, variables=self._variables, _recursive=True)
+                        iteration += 1
+                    i = end_idx + 1
+                    continue
+
+                if etype == "endwhile":
+                    i += 1
+                    continue
+
+                if etype == "set_variable":
+                    name = event.get("name", "")
+                    value_from = event.get("value_from", "literal")
+                    if value_from == "literal":
+                        self._variables[name] = self._resolve_var(event.get("value", ""))
+                    elif value_from == "ocr":
+                        text = event.get("text", "")
+                        results = ocr_find_text(text)
+                        self._variables[name] = results[0][2] if results else ""
+                    elif value_from == "clipboard":
+                        try:
+                            import pyperclip
+                            self._variables[name] = pyperclip.paste()
+                        except Exception:
+                            self._variables[name] = ""
+                    self._execution_log.append({"step": i, "type": "set_variable", "status": "ok", "variable": name})
+                    i += 1
+                    continue
+
+                if etype == "call_script":
+                    script_name = event.get("script_name", "")
+                    if script_name and self.scripts_dir:
+                        from script_manager import ScriptManager
+                        sm = ScriptManager(scripts_dir=os.path.join(self.scripts_dir, "scripts"))
+                        data = sm.load(script_name)
+                        if data:
+                            sub_events = [e for e in data.get("events", []) if not e.get("disabled")]
+                            params = event.get("params", {})
+                            merged_vars = dict(self._variables)
+                            merged_vars.update(params)
+                            self.play(sub_events, variables=merged_vars, _recursive=True)
+                    i += 1
+                    continue
+
+                if etype == "comment":
+                    i += 1
+                    continue
+
+                if etype == "ai_recognize":
+                    var_name = event.get("variable", "")
+                    prompt = event.get("prompt", "请识别图中的验证码，只输出验证码内容")
+                    target = event.get("target", "验证码")
+                    result = None
+                    try:
+                        import ai_recognizer as ai
+                        region = event.get("region")
+                        if region and region != "自动截图":
+                            result = ai.recognize_captcha(region=None, prompt=prompt)
+                        else:
+                            tmp_path = os.path.join(os.path.expanduser("~"), "GhostAction", "tmp_ai_capture.png")
+                            os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
+                            import mss
+                            from PIL import Image as PILImage
+                            with mss.MSS() as sct:
+                                screenshot = sct.grab(sct.monitors[1])
+                                img = PILImage.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                                img.save(tmp_path)
+                            result = ai.recognize_captcha(image_path=tmp_path, prompt=prompt)
+                            try:
+                                os.remove(tmp_path)
+                            except Exception:
+                                pass
+                    except ImportError:
+                        logger.warning("ai_recognizer模块不可用")
+                    except Exception as e:
+                        logger.error("AI识别异常: %s", e)
+                    if result:
+                        self._variables[var_name] = result
+                        logger.info("AI识别成功: %s = %s", var_name, result)
+                        self._execution_log.append({"step": i, "type": "ai_recognize", "status": "ok", "variable": var_name, "result": result})
+                    else:
+                        logger.warning("AI识别失败: %s", target)
+                        self._execution_log.append({"step": i, "type": "ai_recognize", "status": "fail", "variable": var_name})
+                        if not event.get("fallback_manual", True):
+                            self._variables[var_name] = ""
+                    i += 1
+                    continue
+
+                if etype == "wait_manual":
+                    desc = event.get("description", "请手动操作后继续")
+                    var_name = event.get("variable", "")
+                    logger.info("等待人工: %s", desc)
+                    self._execution_log.append({"step": i, "type": "wait_manual", "status": "waiting", "description": desc})
+                    manual_file = os.path.join(os.path.expanduser("~"), "GhostAction", "manual_signal.txt")
+                    try:
+                        os.makedirs(os.path.dirname(manual_file), exist_ok=True)
+                        if os.path.exists(manual_file):
+                            os.remove(manual_file)
+                    except Exception:
+                        pass
+                    wait_timeout = 120
+                    start = time.time()
+                    while time.time() - start < wait_timeout:
+                        if self._stop:
+                            break
+                        self._paused.wait()
+                        if os.path.exists(manual_file):
+                            try:
+                                with open(manual_file, "r", encoding="utf-8") as f:
+                                    content = f.read().strip()
+                                if content:
+                                    if var_name:
+                                        self._variables[var_name] = content
+                                        logger.info("人工输入: %s = %s", var_name, content)
+                                    os.remove(manual_file)
+                                    break
+                            except Exception:
+                                pass
+                        time.sleep(0.5)
+                    self._execution_log.append({"step": i, "type": "wait_manual", "status": "ok"})
                     i += 1
                     continue
 
@@ -350,12 +523,51 @@ class WinPlayer:
                     "mouse_down": 0.3, "mouse_up": 0.05, "mouse_drag": 0.3,
                     "key_down": 0.1, "key_up": 0.05, "scroll": 0.3,
                     "type_text": 0.1, "screenshot": 0.05,
+                    "wait_for": 0.1, "assert_that": 0.1,
+                    "activate": 0.5, "set_variable": 0.05,
+                    "call_script": 0.1,
                 }.get(etype, 0.2)
                 time.sleep(step_delay / self.speed)
-                self._execute(event)
+                self._execute_with_retry(event)
                 i += 1
         except Exception as e:
             logger.error("回放异常: %s", e)
+
+    def _find_end(self, events, start, open_type, close_type):
+        depth = 1
+        i = start + 1
+        while i < len(events):
+            t = events[i].get("type", "")
+            if t == open_type:
+                depth += 1
+            elif t == close_type:
+                depth -= 1
+                if depth == 0:
+                    return i
+            i += 1
+        return None
+
+    def _execute_with_retry(self, event):
+        etype = event.get("type")
+        max_attempts = self.retry_count + 1 if etype in ("mouse_down", "mouse_up") else 1
+        for attempt in range(max_attempts):
+            try:
+                self._execute(event)
+                self._execution_log.append({"step": self._event_index, "type": etype, "status": "ok", "attempt": attempt})
+                return
+            except Exception as e:
+                if attempt < max_attempts - 1:
+                    logger.warning("步骤 %d 执行失败(尝试 %d/%d): %s, %0.1fs后重试",
+                                   self._event_index, attempt + 1, max_attempts, e, self.retry_interval)
+                    time.sleep(self.retry_interval)
+                else:
+                    self._execution_log.append({"step": self._event_index, "type": etype, "status": "fail", "error": str(e)})
+                    if self.on_error == "abort":
+                        self._stop = True
+                    elif self.on_error == "skip":
+                        logger.warning("步骤 %d 失败, 跳过", self._event_index)
+                    else:
+                        logger.warning("步骤 %d 失败, 继续执行", self._event_index)
 
     def _execute(self, event):
         etype = event.get("type")
@@ -373,6 +585,14 @@ class WinPlayer:
             self._do_key_up(event)
         elif etype == "type_text":
             self._do_type_text(event)
+        elif etype == "wait_for":
+            self._do_wait_for(event)
+        elif etype == "assert_that":
+            self._do_assert(event)
+        elif etype == "activate":
+            self._do_activate(event)
+        elif etype in ("set_variable", "call_script", "comment", "ai_recognize", "wait_manual"):
+            pass
 
     def _resolve_coords(self, event):
         if "x" not in event:
@@ -388,24 +608,91 @@ class WinPlayer:
                         new_x, new_y, confidence = result
                         logger.info("视觉匹配: %s 新=(%.0f,%.0f) 置信度=%.2f", tpl_file, new_x, new_y, confidence)
                         return new_x, new_y
+                    logger.warning("视觉匹配失败: %s, 尝试OCR", tpl_file)
                     break
+
         anchor = event.get("ocr_anchor")
-        if anchor and len(anchor.get("text", "")) >= 2:
+        if anchor:
             target_text = anchor["text"]
-            region = {
-                "left": max(0, int(event["x"]) - OCR_REGION_SIZE),
-                "top": max(0, int(event["y"]) - OCR_REGION_SIZE),
-                "width": OCR_REGION_SIZE * 2,
-                "height": OCR_REGION_SIZE * 2,
-            }
-            results = ocr_find_text(target_text, region=region)
-            if results:
-                best_x, best_y, _ = results[0]
-                new_x = best_x - anchor["offset_x"]
-                new_y = best_y - anchor["offset_y"]
-                if 0 <= new_x <= 3000 and 0 <= new_y <= 2000:
-                    return new_x, new_y
+            offset_x = anchor["offset_x"]
+            offset_y = anchor["offset_y"]
+            if len(target_text) >= 2:
+                region = {
+                    "left": max(0, int(event["x"]) - OCR_REGION_SIZE),
+                    "top": max(0, int(event["y"]) - OCR_REGION_SIZE),
+                    "width": OCR_REGION_SIZE * 2,
+                    "height": OCR_REGION_SIZE * 2,
+                }
+                results = ocr_find_text(target_text, region=region)
+                if not results:
+                    logger.info("OCR局部搜索失败: '%s', 尝试全屏搜索", target_text)
+                    results = ocr_find_text(target_text)
+                if results:
+                    best_x, best_y, _ = results[0]
+                    new_x = best_x - offset_x
+                    new_y = best_y - offset_y
+                    if 0 <= new_x <= 3000 and 0 <= new_y <= 2000:
+                        logger.info("OCR定位: '%s' 新=(%.0f,%.0f)", target_text, new_x, new_y)
+                        return new_x, new_y
+                    logger.warning("OCR定位坐标异常: '%s' 新=(%.0f,%.0f), 回退原始坐标", target_text, new_x, new_y)
+            else:
+                logger.info("OCR锚点太短('%s'), 跳过OCR定位", target_text)
+            logger.warning("OCR定位失败: '%s', 回退原始坐标", target_text)
+
+        if self.use_ai_fallback:
+            ai_coords = self._ai_locate(event)
+            if ai_coords:
+                return ai_coords
+
         return event["x"], event["y"]
+
+    def _ai_locate(self, event):
+        try:
+            import ai_recognizer
+        except ImportError:
+            return None
+
+        target_desc = ""
+        ax = event.get("ax_element", {})
+        if ax.get("AXTitle"):
+            target_desc = ax["AXTitle"]
+        elif ax.get("AXRoleDescription"):
+            target_desc = ax["AXRoleDescription"]
+        anchor = event.get("ocr_anchor", {})
+        if not target_desc and anchor.get("text"):
+            target_desc = anchor["text"]
+        if not target_desc:
+            return None
+
+        tmp_path = os.path.join(os.path.expanduser("~"), "GhostAction", "tmp_ai_locate.png")
+        try:
+            import mss
+            from PIL import Image
+            with mss.MSS() as sct:
+                screenshot = sct.grab(sct.monitors[1])
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                img.save(tmp_path)
+        except Exception:
+            return None
+
+        if not os.path.exists(tmp_path):
+            return None
+
+        try:
+            result = ai_recognizer.locate_on_screen(tmp_path, target_desc)
+            if result:
+                x, y = result
+                logger.info("AI兜底定位: 「%s」→ (%d, %d)", target_desc, x, y)
+                return x, y
+        except Exception as e:
+            logger.warning("AI兜底定位异常: %s", e)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        return None
 
     def _get_target_window_bounds(self, event):
         pid = event.get("pid") or self.target_pid
@@ -494,6 +781,91 @@ class WinPlayer:
         else:
             _paste_text(text)
 
+    def _do_wait_for(self, event):
+        strategy = event.get("strategy", "template")
+        timeout = event.get("timeout", 10)
+        interval = event.get("interval", 0.5)
+        start = time.time()
+        while time.time() - start < timeout:
+            if self._stop:
+                return
+            if self._check_condition(event):
+                logger.info("等待条件满足: %s (%.1fs)", strategy, time.time() - start)
+                return
+            time.sleep(interval)
+        logger.warning("等待超时: %s (%ds)", strategy, timeout)
+
+    def _do_assert(self, event):
+        timeout = event.get("timeout", 5)
+        start = time.time()
+        while time.time() - start < timeout:
+            if self._check_condition(event):
+                logger.info("断言通过: %s", event.get("description", ""))
+                return
+            time.sleep(0.3)
+        msg = event.get("description", "断言失败")
+        logger.error("断言失败: %s", msg)
+        if event.get("on_fail", "warn") == "abort":
+            self._stop = True
+
+    def _do_activate(self, event):
+        pid = event.get("pid") or self.target_pid
+        if pid:
+            _activate_app(pid)
+
+    def _check_condition(self, event):
+        strategy = event.get("strategy", "template")
+        if strategy == "template":
+            tpl_file = event.get("template")
+            if tpl_file and self.scripts_dir:
+                tpl_path = None
+                for subdir in ["scripts/templates", "templates"]:
+                    p = os.path.join(self.scripts_dir, subdir, tpl_file)
+                    if os.path.exists(p):
+                        tpl_path = p
+                        break
+                if tpl_path:
+                    result = template_match(tpl_path, threshold=event.get("threshold", TEMPLATE_MATCH_THRESHOLD))
+                    return result is not None
+        elif strategy == "ocr":
+            target_text = event.get("text", "")
+            region = event.get("region")
+            results = ocr_find_text(target_text, region=region)
+            return len(results) > 0
+        elif strategy == "color":
+            x, y = event.get("x", 0), event.get("y", 0)
+            expected = event.get("color", [])
+            tolerance = event.get("tolerance", 20)
+            if not expected or len(expected) != 3:
+                return False
+            try:
+                import mss
+                with mss.MSS() as sct:
+                    px = sct.grab({"left": x, "top": y, "width": 1, "height": 1})
+                    r, g, b = px.pixel(0, 0)[:3]
+                    return abs(r - expected[0]) <= tolerance and abs(g - expected[1]) <= tolerance and abs(b - expected[2]) <= tolerance
+            except Exception:
+                return False
+        elif strategy == "pixel_change":
+            return True
+        return False
+
+    def click_at(self, x, y, button="left"):
+        self._do_mouse_down({"x": x, "y": y, "button": button})
+        time.sleep(0.05)
+        self._do_mouse_up({"x": x, "y": y, "button": button})
+
+    def find_text_on_screen(self, target_text, lang="chi_sim+eng"):
+        results = ocr_find_text(target_text, lang=lang)
+        return results[0][:2] if results else None
+
+    def click_text(self, target_text, lang="chi_sim+eng"):
+        pos = self.find_text_on_screen(target_text, lang)
+        if pos:
+            self.click_at(pos[0], pos[1])
+            return True
+        return False
+
     def generate_report(self, script_name=""):
         ok_count = sum(1 for l in self._execution_log if l.get("status") == "ok")
         fail_count = sum(1 for l in self._execution_log if l.get("status") == "fail")
@@ -502,11 +874,11 @@ class WinPlayer:
         for i, log in enumerate(self._execution_log):
             status_color = "#4caf50" if log.get("status") == "ok" else "#f44336"
             status_text = "OK" if log.get("status") == "ok" else f"FAIL: {log.get('error', '')}"
-            rows += f'<tr><td>{log.get("step", "")}</td><td>{log.get("type", "")}</td><td style="color:{status_color}">{status_text}</td></tr>\n'
+            rows += f'<tr><td>{log.get("step", "")}</td><td>{log.get("type", "")}</td><td style="color:{status_color}">{status_text}</td><td>{log.get("attempt", 0)}</td></tr>\n'
         html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>执行报告 - {script_name}</title>
 <style>body{{font-family:sans-serif;margin:20px}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #ddd;padding:8px;text-align:left}}th{{background:#f5f5f5}}.summary{{margin:10px 0;font-size:18px}}</style>
 </head><body><h1>执行报告: {script_name}</h1>
 <div class="summary">总计: {total} | <span style="color:#4caf50">成功: {ok_count}</span> | <span style="color:#f44336">失败: {fail_count}</span></div>
-<table><tr><th>步骤</th><th>类型</th><th>状态</th></tr>{rows}</table></body></html>"""
+<table><tr><th>步骤</th><th>类型</th><th>状态</th><th>尝试</th></tr>{rows}</table></body></html>"""
         return html

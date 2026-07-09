@@ -12,12 +12,13 @@ class ScriptManager:
         self.scripts_dir = scripts_dir or SCRIPTS_DIR
         os.makedirs(self.scripts_dir, exist_ok=True)
 
-    def save(self, name, events, meta=None):
+    def save(self, name, events, meta=None, intent=""):
         script = {
             "name": name,
             "created": time.strftime("%Y-%m-%d %H:%M:%S"),
             "event_count": len(events),
             "meta": meta or {},
+            "intent": intent or "",
             "events": events,
         }
         path = os.path.join(self.scripts_dir, f"{name}.json")
@@ -46,6 +47,7 @@ class ScriptManager:
                         "name": data.get("name", fname[:-5]),
                         "events": data.get("event_count", 0),
                         "created": data.get("created", ""),
+                        "intent": data.get("intent", ""),
                     })
                 except Exception:
                     result.append({"name": fname[:-5], "events": 0, "created": ""})

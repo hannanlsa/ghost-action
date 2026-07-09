@@ -552,3 +552,107 @@ def get_available_models(config=None):
             "has_key": bool(api_key),
         })
     return available
+
+
+def generate_intent(events, meta=None, config=None):
+    if config is None:
+        config = load_config()
+
+    steps_summary = []
+    for i, e in enumerate(events):
+        etype = e.get("type", "")
+        if etype == "mouse_down":
+            btn = e.get("button", "left")
+            win = e.get("window", {})
+            win_name = win.get("owner", "") or win.get("title", "")
+            ocr = e.get("ocr_anchor", {}).get("text", "")
+            ax = e.get("ax_element", {})
+            ax_title = ax.get("AXTitle", "")
+            desc = f"步骤{i+1}: {'右键' if btn == 'right' else ''}点击"
+            if ax_title:
+                desc += f"「{ax_title}」"
+            elif ocr:
+                desc += f"「{ocr}」附近"
+            if win_name:
+                desc += f" (窗口:{win_name})"
+            steps_summary.append(desc)
+        elif etype == "key_down":
+            text = e.get("text", "")
+            mods = "+".join(e.get("modifiers", []))
+            if text:
+                steps_summary.append(f"步骤{i+1}: 输入「{text}」" + (f" (修饰键:{mods})" if mods else ""))
+            elif mods:
+                steps_summary.append(f"步骤{i+1}: 按快捷键 {mods}")
+        elif etype == "scroll":
+            dy = e.get("dy", 0)
+            steps_summary.append(f"步骤{i+1}: {'向下' if dy > 0 else '向上'}滚动")
+        elif etype == "mouse_drag":
+            steps_summary.append(f"步骤{i+1}: 拖拽")
+
+    if not steps_summary:
+        return ""
+
+    prompt = (
+        "请分析以下桌面操作录制步骤，用一句话概括这个操作的整体意图（做什么事），"
+        "然后用简短的短语描述每个步骤的目的。格式：\n"
+        "意图：<一句话概括>\n"
+        "步骤意图：\n"
+        "1. <步骤1目的>\n"
+        "2. <步骤2目的>\n"
+        "...\n\n"
+        "操作步骤：\n" + "\n".join(steps_summary)
+    )
+
+    result = recognize_text(prompt, config=config)
+    if result:
+        logger.info("AI意图生成: %s", result[:100])
+    return result or ""
+
+
+def locate_on_screen(image_path, target_description, config=None):
+    if config is None:
+        config = load_config()
+
+    model_key = config.get("vision_model", "glm-4v-flash")
+    model_info = MODEL_REGISTRY.get(model_key)
+    if not model_info or "vision" not in model_info.get("capabilities", []):
+        logger.warning("AI视觉模型不可用，跳过屏幕理解定位")
+        return None
+
+    provider = model_info["provider"]
+    api_key = _get_api_key(config, provider)
+    if not api_key:
+        logger.warning("未配置API Key，跳过AI屏幕理解定位")
+        return None
+
+    if not image_path or not os.path.exists(image_path):
+        return None
+
+    img_b64 = _encode_image_base64(image_path)
+
+    prompt = (
+        f"在截图中找到「{target_description}」的位置。"
+        f"请返回其中心点的像素坐标，格式为 JSON: {{\"x\": 数字, \"y\": 数字}}\n"
+        f"如果找不到，返回 {{\"x\": -1, \"y\": -1}}\n"
+        f"只返回JSON，不要其他文字。"
+    )
+
+    messages = _build_vision_messages(prompt, img_b64, model_info)
+
+    try:
+        result = _dispatch_call(provider, api_key, model_info["model_id"], messages)
+        if not result:
+            return None
+        result = result.strip()
+        if result.startswith("```"):
+            result = result.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        coords = json.loads(result)
+        x, y = coords.get("x", -1), coords.get("y", -1)
+        if x < 0 or y < 0:
+            logger.info("AI屏幕理解: 未找到「%s」", target_description)
+            return None
+        logger.info("AI屏幕理解: 「%s」位于 (%d, %d)", target_description, x, y)
+        return (x, y)
+    except (json.JSONDecodeError, Exception) as e:
+        logger.warning("AI屏幕理解定位失败: %s", e)
+        return None
