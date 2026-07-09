@@ -1136,13 +1136,21 @@ class AutoRepeatApp:
         frm = ttk.Frame(top, padding=12)
         frm.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(frm, text="AI识别步骤：截图指定区域→调用大模型识别→结果存入变量", font=("", 10, "bold"), wraplength=420).pack(anchor="w", pady=(0, 8))
+        ttk.Label(frm, text="AI识别步骤：根据模式调用视觉AI或文本AI", font=("", 10, "bold"), wraplength=420).pack(anchor="w", pady=(0, 8))
+
+        row0 = ttk.Frame(frm)
+        row0.pack(fill=tk.X, pady=4)
+        ttk.Label(row0, text="识别模式:").pack(side=tk.LEFT, padx=(0, 4))
+        mode_var = tk.StringVar(value="vision")
+        mode_combo = ttk.Combobox(row0, textvariable=mode_var, values=["vision:图像识别(验证码/图形)", "text:文本问答(答题/推理)"], width=30, state="readonly")
+        mode_combo.pack(side=tk.LEFT)
+        mode_combo.current(0)
 
         row1 = ttk.Frame(frm)
         row1.pack(fill=tk.X, pady=4)
         ttk.Label(row1, text="识别目标:").pack(side=tk.LEFT, padx=(0, 4))
         target_var = tk.StringVar(value="验证码")
-        ttk.Combobox(row1, textvariable=target_var, values=["验证码", "文字", "数字", "图形"], width=12, state="readonly").pack(side=tk.LEFT)
+        ttk.Combobox(row1, textvariable=target_var, values=["验证码", "文字", "数字", "图形", "答题"], width=12, state="readonly").pack(side=tk.LEFT)
 
         row2 = ttk.Frame(frm)
         row2.pack(fill=tk.X, pady=4)
@@ -1177,10 +1185,13 @@ class AutoRepeatApp:
                 messagebox.showwarning("提示", "请输入变量名", parent=top)
                 return
             prompt = prompt_var.get().strip() or f"请识别图中的{target}，只输出{target}内容，不要输出其他文字"
+            mode_str = mode_var.get()
+            mode = "text" if mode_str.startswith("text") else "vision"
             ev = {
                 "type": "ai_recognize",
                 "target": target,
                 "variable": var,
+                "mode": mode,
                 "prompt": prompt,
                 "region": region_var.get(),
                 "fallback_manual": manual_var.get(),

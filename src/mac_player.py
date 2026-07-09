@@ -398,25 +398,30 @@ class MacPlayer:
                     var_name = event.get("variable", "")
                     prompt = event.get("prompt", "请识别图中的验证码，只输出验证码内容")
                     target = event.get("target", "验证码")
+                    mode = event.get("mode", "vision")
                     result = None
                     try:
                         import ai_recognizer as ai
-                        region = event.get("region")
-                        if region and region != "自动截图":
-                            result = ai.recognize_captcha(region=None, prompt=prompt)
+                        if mode == "text":
+                            resolved_prompt = self._resolve_var(prompt)
+                            result = ai.recognize_text(resolved_prompt)
                         else:
-                            tmp_path = os.path.join(os.path.expanduser("~"), "GhostAction", "tmp_ai_capture.png")
-                            os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
-                            with mss.MSS() as sct:
-                                screenshot = sct.grab(sct.monitors[1])
-                                from PIL import Image as PILImage
-                                img = PILImage.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
-                                img.save(tmp_path)
-                            result = ai.recognize_captcha(image_path=tmp_path, prompt=prompt)
-                            try:
-                                os.remove(tmp_path)
-                            except Exception:
-                                pass
+                            region = event.get("region")
+                            if region and region != "自动截图":
+                                result = ai.recognize_captcha(region=None, prompt=prompt)
+                            else:
+                                tmp_path = os.path.join(os.path.expanduser("~"), "GhostAction", "tmp_ai_capture.png")
+                                os.makedirs(os.path.dirname(tmp_path), exist_ok=True)
+                                with mss.MSS() as sct:
+                                    screenshot = sct.grab(sct.monitors[1])
+                                    from PIL import Image as PILImage
+                                    img = PILImage.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+                                    img.save(tmp_path)
+                                result = ai.recognize_captcha(image_path=tmp_path, prompt=prompt)
+                                try:
+                                    os.remove(tmp_path)
+                                except Exception:
+                                    pass
                     except ImportError:
                         logger.warning("ai_recognizer模块不可用")
                     except Exception as e:
