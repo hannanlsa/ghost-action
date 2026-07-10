@@ -1,0 +1,15 @@
+{
+  "name": "auto_test",
+  "created": "2026-07-07 09:12:59",
+  "event_count": 1,
+  "meta": {
+    "duration": 2.0
+  },
+  "events": [
+    {
+      "type": "comment",
+      "text": "test",
+      "time": 0
+    }
+  ]
+}

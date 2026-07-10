@@ -267,6 +267,10 @@ class AutoRepeatApp:
         version_label.pack(side=tk.RIGHT, padx=(0, 12))
         version_label.bind("<Button-1>", lambda e: self._check_update_manual())
 
+        self.ai_status_var = tk.StringVar(value="")
+        ttk.Label(row2, textvariable=self.ai_status_var, foreground="#999").pack(side=tk.RIGHT, padx=(0, 8))
+        self.root.after(5000, self._update_ai_status)
+
         nb = ttk.Notebook(main)
         nb.pack(fill=tk.BOTH, expand=True)
 
@@ -282,6 +286,11 @@ class AutoRepeatApp:
         search_entry.bind("<Return>", lambda e: self._search_scripts())
         ttk.Button(search_row, text="搜索", command=self._search_scripts, width=6).pack(side=tk.LEFT, padx=2)
         ttk.Button(search_row, text="全部", command=self._refresh_scripts, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(search_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        ttk.Button(search_row, text="编辑", command=self._open_editor, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="重命名", command=self._rename, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="删除", command=self._delete, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="刷新", command=self._refresh_scripts, width=6).pack(side=tk.LEFT, padx=2)
 
         cols = ("name", "events", "intent", "category", "created")
         self.tree = ttk.Treeview(scripts_tab, columns=cols, show="headings", height=8)
@@ -301,12 +310,17 @@ class AutoRepeatApp:
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.tree.configure(yscrollcommand=sb.set)
 
-        btn_frame = ttk.Frame(scripts_tab)
-        btn_frame.pack(fill=tk.X, pady=(3, 0))
-        ttk.Button(btn_frame, text="编辑", command=self._open_editor, width=8).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="重命名", command=self._rename, width=8).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="删除", command=self._delete, width=8).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="刷新", command=self._refresh_scripts, width=8).pack(side=tk.LEFT, padx=3)
+        self.tree_menu = tk.Menu(self.root, tearoff=0)
+        self.tree_menu.add_command(label="编辑", command=self._open_editor)
+        self.tree_menu.add_command(label="重命名", command=self._rename)
+        self.tree_menu.add_command(label="删除", command=self._delete)
+        self.tree_menu.add_separator()
+        self.tree_menu.add_command(label="刷新", command=self._refresh_scripts)
+        if IS_MAC:
+            self.tree.bind("<Button-2>", self._show_tree_menu)
+            self.tree.bind("<Control-Button-1>", self._show_tree_menu)
+        else:
+            self.tree.bind("<Button-3>", self._show_tree_menu)
 
 
         self.editor_tab = ttk.Frame(nb)
@@ -471,14 +485,22 @@ class AutoRepeatApp:
 
         pids = [e.get("pid") for e in events if e.get("pid")]
         pid_counter = Counter(pids)
-        window_info = {}
+        pid_names = {}
+        for e in events:
+            pid = e.get("pid")
+            if not pid or pid in pid_names:
+                continue
+            win = e.get("window") or {}
+            owner = win.get("owner", "")
+            if owner:
+                pid_names[pid] = owner
         if get_visible_windows:
             for w in get_visible_windows():
-                window_info[w["pid"]] = w.get("owner", "")
-        pid_names = {}
+                if w["pid"] not in pid_names and w.get("owner"):
+                    pid_names[w["pid"]] = w["owner"]
         for pid, count in pid_counter.most_common():
-            pname = window_info.get(pid, f"PID:{pid}")
-            pid_names[pid] = pname
+            if pid not in pid_names:
+                pid_names[pid] = f"PID:{pid}"
 
         click_count = sum(1 for e in events if e["type"] == "mouse_down")
         key_count = sum(1 for e in events if e["type"] == "key_down")
@@ -497,9 +519,7 @@ class AutoRepeatApp:
             import ai_recognizer
             self.status_var.set("AI生成意图描述中...")
             self.root.update_idletasks()
-            intent = ai_recognizer.generate_intent(events, meta)
-            if intent:
-                logger.info("AI意图: %s", intent[:80])
+            intent = ai_recognizer.generate_intent_with_fallback(events, meta)
         except Exception as e:
             logger.warning("AI意图生成失败: %s", e)
 
@@ -795,6 +815,12 @@ class AutoRepeatApp:
                 self.sm.delete(old_name)
                 self._refresh_scripts()
 
+    def _show_tree_menu(self, event):
+        row = self.tree.identify_row(event.y)
+        if row:
+            self.tree.selection_set(row)
+            self.tree_menu.tk_popup(event.x_root, event.y_root)
+
     def _delete(self):
         sel = self.tree.selection()
         if not sel:
@@ -848,11 +874,19 @@ class AutoRepeatApp:
         self.params_var.set(params_str)
 
         pid_names = data.get("meta", {}).get("pid_names", {})
-        if not pid_names and get_visible_windows:
-            for w in get_visible_windows():
-                for e in self._current_events:
-                    if e.get("pid") == w["pid"]:
-                        pid_names[w["pid"]] = w.get("owner", "")
+        if not pid_names:
+            for e in self._current_events:
+                pid = e.get("pid")
+                if pid and pid not in pid_names:
+                    win = e.get("window") or {}
+                    owner = win.get("owner", "")
+                    if owner:
+                        pid_names[pid] = owner
+            if get_visible_windows:
+                for w in get_visible_windows():
+                    for e in self._current_events:
+                        if e.get("pid") == w["pid"] and w["pid"] not in pid_names:
+                            pid_names[w["pid"]] = w.get("owner", "")
 
         pids = set(e.get("pid") for e in self._current_events if e.get("pid"))
         labels = ["全部"]
@@ -1835,7 +1869,7 @@ class AutoRepeatApp:
         self.root.update_idletasks()
         try:
             import ai_recognizer
-            intent = ai_recognizer.generate_intent(events, meta)
+            intent = ai_recognizer.generate_intent_with_fallback(events, meta)
             if intent:
                 self.intent_var.set(intent)
                 self.status_var.set("AI意图已生成")
@@ -1890,6 +1924,29 @@ class AutoRepeatApp:
 
         top.wait_window()
         return result[0]
+
+    def _update_ai_status(self):
+        try:
+            import ai_recognizer
+            status = ai_recognizer.get_ai_status()
+            if status["online"]:
+                parts = ["🟢在线"]
+                if status["cloud_vision"]:
+                    parts.append("视觉AI")
+                if status["cloud_text"]:
+                    parts.append("文本AI")
+                if status["local_trocr"]:
+                    parts.append("TrOCR")
+                self.ai_status_var.set(" ".join(parts))
+            else:
+                parts = ["🔴离网"]
+                if status["local_trocr"]:
+                    parts.append("TrOCR")
+                parts.append("本地OCR")
+                self.ai_status_var.set(" ".join(parts))
+        except Exception:
+            self.ai_status_var.set("")
+        self.root.after(30000, self._update_ai_status)
 
     def _check_permissions(self):
         if not IS_MAC:

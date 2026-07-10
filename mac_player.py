@@ -631,7 +631,7 @@ class MacPlayer:
             return None
 
         try:
-            result = ai_recognizer.locate_on_screen(tmp_path, target_desc)
+            result = ai_recognizer.locate_on_screen_with_fallback(tmp_path, target_desc)
             if result:
                 x, y = result
                 logger.info("AI兜底定位: 「%s」→ (%d, %d)", target_desc, x, y)

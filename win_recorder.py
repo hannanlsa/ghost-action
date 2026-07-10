@@ -5,7 +5,10 @@ import threading
 import queue
 import ctypes
 import ctypes.wintypes
-from ctypes import windll, Structure, POINTER, byref, sizeof, c_long, c_ulong
+from ctypes import windll, Structure, POINTER, byref, sizeof, c_long, c_ulong, c_uint64
+
+if not hasattr(ctypes.wintypes, 'ULONG_PTR'):
+    ctypes.wintypes.ULONG_PTR = c_uint64
 
 logger = logging.getLogger("win_recorder")
 

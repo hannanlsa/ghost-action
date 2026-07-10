@@ -1,0 +1,71 @@
+2026-07-07 08:27:02.315 [root] INFO ============================================================
+2026-07-07 08:27:02.315 [root] INFO 昨日重现 启动
+2026-07-07 08:27:02.315 [root] INFO PID=79571 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 08:27:02.315 [root] INFO ============================================================
+2026-07-07 08:27:03.517 [gui] INFO 全局热键已注册: Ctrl+Shift+R 录制, Ctrl+Shift+S 停止
+2026-07-07 08:28:49.577 [recorder] INFO 录制开始
+2026-07-07 08:28:52.067 [PIL.Image] DEBUG Importing PngImagePlugin
+2026-07-07 08:29:14.376 [root] INFO ============================================================
+2026-07-07 08:29:14.380 [root] INFO 昨日重现 启动
+2026-07-07 08:29:14.380 [root] INFO PID=80204 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 08:29:14.380 [root] INFO ============================================================
+2026-07-07 08:29:15.108 [gui] INFO 全局热键已注册: Ctrl+Shift+R 录制, Ctrl+Shift+S 停止
+2026-07-07 08:29:27.885 [root] INFO 昨日重现 退出
+2026-07-07 08:29:34.019 [root] INFO ============================================================
+2026-07-07 08:29:34.019 [root] INFO 昨日重现 启动
+2026-07-07 08:29:34.019 [root] INFO PID=80321 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 08:29:34.019 [root] INFO ============================================================
+2026-07-07 08:29:34.615 [gui] INFO 全局热键已注册: Ctrl+Shift+R 录制, Ctrl+Shift+S 停止
+2026-07-07 08:29:41.160 [root] INFO 昨日重现 退出
+2026-07-07 08:30:51.214 [root] INFO 昨日重现 退出
+2026-07-07 08:31:20.718 [root] INFO ============================================================
+2026-07-07 08:31:20.718 [root] INFO 昨日重现 启动
+2026-07-07 08:31:20.718 [root] INFO PID=80874 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 08:31:20.718 [root] INFO ============================================================
+2026-07-07 08:31:21.369 [gui] INFO 全局热键已注册: Ctrl+Shift+R 录制, Ctrl+Shift+S 停止
+2026-07-07 08:31:57.765 [root] INFO ============================================================
+2026-07-07 08:31:57.765 [root] INFO 昨日重现 启动
+2026-07-07 08:31:57.765 [root] INFO PID=81067 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 08:31:57.765 [root] INFO ============================================================
+2026-07-07 08:31:58.343 [gui] INFO 全局热键已注册: Ctrl+Shift+R 录制, Ctrl+Shift+S 停止
+2026-07-07 08:40:20.362 [recorder] INFO 录制开始
+2026-07-07 08:40:22.298 [PIL.Image] DEBUG Importing PngImagePlugin
+2026-07-07 08:43:39.835 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_pj9f7nwd_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_pj9f7nwd', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.001 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_01_vqoyf_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_01_vqoyf', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.168 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess__ptspifl_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess__ptspifl', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.285 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_g8j5t3ju_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_g8j5t3ju', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.419 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_90c2oh1p_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_90c2oh1p', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.565 [recorder] INFO OCR处理: 5/17
+2026-07-07 08:43:40.586 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_h5ct2_za_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_h5ct2_za', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.717 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_irqk_m9q_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_irqk_m9q', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.841 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_gy7g3oza_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_gy7g3oza', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:40.972 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_lvhx_tnt_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_lvhx_tnt', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:41.150 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_bwskr6b5_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_bwskr6b5', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:41.259 [recorder] INFO OCR处理: 10/17
+2026-07-07 08:43:41.285 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_sigz69aj_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_sigz69aj', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:41.468 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_c6os_i94_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_c6os_i94', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:41.586 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_50k__xjo_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_50k__xjo', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:41.718 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_mrx81d2e_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_mrx81d2e', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:41.903 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_br2hn3y7_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_br2hn3y7', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:42.046 [recorder] INFO OCR处理: 15/17
+2026-07-07 08:43:42.066 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_if5huq2j_input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_if5huq2j', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:42.200 [pytesseract] DEBUG ['tesseract', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_i6uywiz__input.PNG', '/var/folders/q6/hzh9d_2n6w590bgyl24y3qw00000gn/T/tess_i6uywiz_', '-l', 'chi_sim+eng', '-c', 'tessedit_create_tsv=1']
+2026-07-07 08:43:42.365 [recorder] INFO OCR处理: 17/17
+2026-07-07 08:43:42.365 [recorder] INFO 录制停止, 73 事件, 11 OCR锚点, 17 视觉模板
+2026-07-07 09:01:34.044 [root] INFO 昨日重现 退出
+2026-07-07 09:18:09.107 [root] INFO ============================================================
+2026-07-07 09:18:09.108 [root] INFO 昨日重现 启动
+2026-07-07 09:18:09.108 [root] INFO PID=96653 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 09:18:09.108 [root] INFO ============================================================
+2026-07-07 09:18:10.298 [gui] WARNING 全局热键注册失败，请检查辅助功能权限
+2026-07-07 09:18:41.765 [root] INFO ============================================================
+2026-07-07 09:18:41.765 [root] INFO 昨日重现 启动
+2026-07-07 09:18:41.765 [root] INFO PID=97629 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 09:18:41.765 [root] INFO ============================================================
+2026-07-07 09:18:42.473 [gui] INFO 全局热键已注册: Ctrl+Shift+R 录制, Ctrl+Shift+S 停止
+2026-07-07 09:19:19.147 [root] INFO 昨日重现 退出
+2026-07-07 09:20:54.219 [root] INFO ============================================================
+2026-07-07 09:20:54.220 [root] INFO 昨日重现 启动
+2026-07-07 09:20:54.220 [root] INFO PID=98386 CWD=/Users/panxiao/华为云码道专用文件/昨日重现
+2026-07-07 09:20:54.220 [root] INFO ============================================================
+2026-07-07 09:20:55.572 [gui] WARNING 全局热键注册失败，请检查辅助功能权限

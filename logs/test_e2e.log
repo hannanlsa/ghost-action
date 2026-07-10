@@ -1,0 +1,52 @@
+2026-07-07 08:34:08.497 [e2e_test] INFO ============================================================
+2026-07-07 08:34:08.498 [e2e_test] INFO 步骤1: 启动录制器
+2026-07-07 08:34:08.520 [recorder] INFO 录制开始
+2026-07-07 08:34:08.521 [e2e_test] INFO 录制器已启动，等待2秒...
+2026-07-07 08:34:10.526 [e2e_test] INFO 步骤2: 用AppleScript模拟用户点击（Finder窗口）
+2026-07-07 08:34:10.956 [e2e_test] INFO AppleScript结果: rc=0 stderr=
+2026-07-07 08:34:11.961 [e2e_test] INFO 步骤3: 模拟键盘输入（打开Spotlight: Cmd+Space）
+2026-07-07 08:34:12.140 [e2e_test] INFO AppleScript键盘结果: rc=0 stderr=
+2026-07-07 08:34:13.144 [e2e_test] INFO 步骤4: 关闭Spotlight（按Escape）
+2026-07-07 08:34:14.299 [e2e_test] INFO 步骤5: 停止录制
+2026-07-07 08:34:14.310 [recorder] INFO 录制停止, 0 事件, 0 OCR锚点, 0 视觉模板
+2026-07-07 08:34:14.312 [e2e_test] INFO 录制完成，共 0 事件
+2026-07-07 08:34:14.313 [e2e_test] INFO 鼠标事件: 0, 键盘事件: 0
+2026-07-07 08:34:14.313 [e2e_test] ERROR BUG: 录制0事件！AppleScript模拟的操作未被CGEventTap捕获
+2026-07-07 08:34:14.313 [e2e_test] ERROR 可能原因: CGEventTap在ListenOnly模式下无法捕获osascript发出的事件
+2026-07-07 08:34:14.313 [e2e_test] INFO 尝试用CGEventPost直接发送事件...
+2026-07-07 08:34:14.313 [e2e_test] INFO ============================================================
+2026-07-07 08:34:14.313 [e2e_test] INFO 备用方案: 用CGEventPost直接发送事件
+2026-07-07 08:34:14.315 [recorder] INFO 录制开始
+2026-07-07 08:34:15.967 [e2e_test] CRITICAL 测试崩溃: cannot import name 'kCGKeyCode_Space' from 'Quartz' (/opt/homebrew/lib/python3.14/site-packages/Quartz/__init__.py)
+Traceback (most recent call last):
+  File "/Users/panxiao/华为云码道专用文件/昨日重现/test_e2e.py", line 229, in <module>
+    ok = test_record_and_play()
+  File "/Users/panxiao/华为云码道专用文件/昨日重现/test_e2e.py", line 110, in test_record_and_play
+    return test_with_cg_event_post()
+  File "/Users/panxiao/华为云码道专用文件/昨日重现/test_e2e.py", line 173, in test_with_cg_event_post
+    from Quartz import kCGKeyCode_Space
+ImportError: cannot import name 'kCGKeyCode_Space' from 'Quartz' (/opt/homebrew/lib/python3.14/site-packages/Quartz/__init__.py)
+2026-07-07 08:34:34.893 [e2e_test] INFO ============================================================
+2026-07-07 08:34:34.893 [e2e_test] INFO 步骤1: 启动录制器
+2026-07-07 08:34:34.916 [recorder] INFO 录制开始
+2026-07-07 08:34:34.916 [e2e_test] INFO 录制器已启动，等待2秒...
+2026-07-07 08:34:36.921 [e2e_test] INFO 步骤2: 用AppleScript模拟用户点击（Finder窗口）
+2026-07-07 08:34:37.098 [e2e_test] INFO AppleScript结果: rc=0 stderr=
+2026-07-07 08:34:38.104 [e2e_test] INFO 步骤3: 模拟键盘输入（打开Spotlight: Cmd+Space）
+2026-07-07 08:34:38.264 [e2e_test] INFO AppleScript键盘结果: rc=0 stderr=
+2026-07-07 08:34:39.269 [e2e_test] INFO 步骤4: 关闭Spotlight（按Escape）
+2026-07-07 08:34:40.436 [e2e_test] INFO 步骤5: 停止录制
+2026-07-07 08:34:40.443 [recorder] INFO 录制停止, 0 事件, 0 OCR锚点, 0 视觉模板
+2026-07-07 08:34:40.444 [e2e_test] INFO 录制完成，共 0 事件
+2026-07-07 08:34:40.444 [e2e_test] INFO 鼠标事件: 0, 键盘事件: 0
+2026-07-07 08:34:40.444 [e2e_test] ERROR BUG: 录制0事件！AppleScript模拟的操作未被CGEventTap捕获
+2026-07-07 08:34:40.444 [e2e_test] ERROR 可能原因: CGEventTap在ListenOnly模式下无法捕获osascript发出的事件
+2026-07-07 08:34:40.444 [e2e_test] INFO 尝试用CGEventPost直接发送事件...
+2026-07-07 08:34:40.445 [e2e_test] INFO ============================================================
+2026-07-07 08:34:40.445 [e2e_test] INFO 备用方案: 用CGEventPost直接发送事件
+2026-07-07 08:34:40.447 [recorder] INFO 录制开始
+2026-07-07 08:34:42.731 [recorder] INFO 录制停止, 0 事件, 0 OCR锚点, 0 视觉模板
+2026-07-07 08:34:42.732 [e2e_test] INFO CGEventPost录制完成，共 0 事件
+2026-07-07 08:34:42.733 [e2e_test] INFO 鼠标事件: 0, 键盘事件: 0
+2026-07-07 08:34:42.733 [e2e_test] ERROR 严重BUG: CGEventPost发出的事件也未被捕获！
+2026-07-07 08:34:42.733 [e2e_test] ERROR 这说明CGEventTap在ListenOnly模式下无法捕获自己进程发出的事件

@@ -1,0 +1,704 @@
+{
+  "name": "1234",
+  "created": "2026-07-07 08:43:42",
+  "event_count": 73,
+  "meta": {
+    "clicks": 17,
+    "keys": 13,
+    "drags": 2,
+    "ocr_anchors": 11,
+    "templates": 17,
+    "duration": 202.0
+  },
+  "events": [
+    {
+      "type": "key_up",
+      "keycode": 36,
+      "time": 0.61676025390625,
+      "pid": null
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0000.png",
+      "time": 1.9203152656555176
+    },
+    {
+      "type": "mouse_down",
+      "x": 1696.25,
+      "y": 1057.5,
+      "button": "left",
+      "time": 1.7324652671813965,
+      "pid": null,
+      "template": "tpl_0000.png"
+    },
+    {
+      "type": "mouse_up",
+      "x": 1696.25,
+      "y": 1057.5,
+      "button": "left",
+      "time": 1.944939136505127,
+      "pid": null
+    },
+    {
+      "type": "mouse_down",
+      "x": 1670.0,
+      "y": 1048.75,
+      "button": "left",
+      "time": 3.069705009460449,
+      "pid": null,
+      "template": "tpl_0001.png",
+      "ocr_anchor": {
+        "text": "20",
+        "offset_x": 22.0,
+        "offset_y": -14.75
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 1670.0,
+      "y": 1048.75,
+      "button": "left",
+      "time": 3.1804871559143066,
+      "pid": null
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0001.png",
+      "time": 4.93987512588501
+    },
+    {
+      "type": "mouse_down",
+      "x": 1796.25,
+      "y": 1062.5,
+      "button": "left",
+      "time": 4.787796974182129,
+      "pid": null,
+      "template": "tpl_0002.png"
+    },
+    {
+      "type": "mouse_up",
+      "x": 1796.25,
+      "y": 1062.5,
+      "button": "left",
+      "time": 4.9598143100738525,
+      "pid": null
+    },
+    {
+      "type": "mouse_down",
+      "x": 1203.75,
+      "y": 877.5,
+      "button": "left",
+      "time": 5.8225579261779785,
+      "pid": 41962,
+      "template": "tpl_0003.png",
+      "ax_element": {
+        "AXRole": "AXGroup",
+        "AXRoleDescription": "组"
+      },
+      "ax_actions": [
+        "AXShowMenu",
+        "AXScrollToVisible"
+      ],
+      "ocr_anchor": {
+        "text": "~",
+        "offset_x": -41.75,
+        "offset_y": 34.5
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 1203.75,
+      "y": 877.5,
+      "button": "left",
+      "time": 5.9039812088012695,
+      "pid": 41962
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0002.png",
+      "time": 8.06997036933899
+    },
+    {
+      "type": "key_down",
+      "keycode": 16,
+      "time": 7.953912258148193,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 16,
+      "time": 8.070465087890625,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 34,
+      "time": 8.135180234909058,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 34,
+      "time": 8.192354202270508,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 38,
+      "time": 8.330203294754028,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 38,
+      "time": 8.385033130645752,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 49,
+      "time": 8.967177152633667,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 49,
+      "time": 9.165765285491943,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 37,
+      "time": 9.663747072219849,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 37,
+      "time": 9.770365953445435,
+      "pid": 41962
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0003.png",
+      "time": 10.217181921005249
+    },
+    {
+      "type": "key_down",
+      "keycode": 9,
+      "time": 10.067254066467285,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 9,
+      "time": 10.21733021736145,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 6,
+      "time": 10.488717079162598,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 6,
+      "time": 10.49897027015686,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 4,
+      "time": 11.75325632095337,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 4,
+      "time": 11.814941167831421,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 34,
+      "time": 11.953286170959473,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 34,
+      "time": 12.03633427619934,
+      "pid": 41962
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0004.png",
+      "time": 12.873167276382446
+    },
+    {
+      "type": "key_down",
+      "keycode": 49,
+      "time": 12.665529251098633,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 49,
+      "time": 12.87330412864685,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 36,
+      "time": 13.348323106765747,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 36,
+      "time": 13.399940252304077,
+      "pid": 41962
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0005.png",
+      "time": 117.96087718009949
+    },
+    {
+      "type": "mouse_down",
+      "x": 400.0,
+      "y": 300.0,
+      "button": "left",
+      "time": 117.83940100669861,
+      "pid": 41962,
+      "template": "tpl_0004.png",
+      "ax_element": {
+        "AXRole": "AXGroup",
+        "AXRoleDescription": "组"
+      },
+      "ax_actions": [
+        "AXShowMenu",
+        "AXScrollToVisible"
+      ],
+      "ocr_anchor": {
+        "text": "2026-07-07",
+        "offset_x": -13.0,
+        "offset_y": -13.0
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 400.0,
+      "y": 300.0,
+      "button": "left",
+      "time": 118.02080798149109,
+      "pid": 41962
+    },
+    {
+      "type": "key_down",
+      "keycode": 49,
+      "time": 118.02093124389648,
+      "pid": 41962,
+      "modifiers": [
+        "cmd"
+      ]
+    },
+    {
+      "type": "key_up",
+      "keycode": 49,
+      "time": 118.02098822593689,
+      "pid": 41962,
+      "modifiers": [
+        "cmd"
+      ]
+    },
+    {
+      "type": "key_down",
+      "keycode": 9,
+      "time": 118.06449317932129,
+      "pid": 41962
+    },
+    {
+      "type": "key_up",
+      "keycode": 9,
+      "time": 118.06457233428955,
+      "pid": 41962
+    },
+    {
+      "type": "scroll",
+      "x": 400.0,
+      "y": 300.0,
+      "dx": 0,
+      "dy": -1,
+      "time": 118.21565532684326,
+      "pid": 41962
+    },
+    {
+      "type": "mouse_down",
+      "x": 200.0,
+      "y": 200.0,
+      "button": "left",
+      "time": 118.21615624427795,
+      "pid": 80874,
+      "template": "tpl_0005.png",
+      "ax_element": {
+        "AXRole": "AXWindow",
+        "AXTitle": "昨日重现 - 示教再现RPA",
+        "AXRoleDescription": "标准窗口"
+      },
+      "ax_actions": [
+        "AXRaise"
+      ],
+      "ocr_anchor": {
+        "text": "or",
+        "offset_x": 22.0,
+        "offset_y": -64.0
+      }
+    },
+    {
+      "type": "mouse_drag",
+      "x": 400.0,
+      "y": 400.0,
+      "button": "left",
+      "time": 118.27146029472351,
+      "pid": 80874
+    },
+    {
+      "type": "mouse_up",
+      "x": 400.0,
+      "y": 400.0,
+      "button": "left",
+      "time": 118.34012413024902,
+      "pid": 80874
+    },
+    {
+      "type": "mouse_down",
+      "x": 300.0,
+      "y": 300.0,
+      "button": "left",
+      "time": 118.34026598930359,
+      "pid": 41962,
+      "template": "tpl_0006.png",
+      "ax_element": {
+        "AXRole": "AXToolbar",
+        "AXDescription": "资源管理器操作",
+        "AXRoleDescription": "工具栏"
+      },
+      "ax_actions": [
+        "AXShowMenu",
+        "AXScrollToVisible"
+      ]
+    },
+    {
+      "type": "mouse_up",
+      "x": 300.0,
+      "y": 300.0,
+      "button": "left",
+      "time": 118.41100430488586,
+      "pid": 41962
+    },
+    {
+      "type": "mouse_down",
+      "x": 300.0,
+      "y": 300.0,
+      "button": "left",
+      "time": 118.41301822662354,
+      "pid": 41962,
+      "template": "tpl_0007.png",
+      "ax_element": {
+        "AXRole": "AXGroup",
+        "AXRoleDescription": "组"
+      },
+      "ax_actions": [
+        "AXShowMenu",
+        "AXScrollToVisible"
+      ]
+    },
+    {
+      "type": "mouse_up",
+      "x": 300.0,
+      "y": 300.0,
+      "button": "left",
+      "time": 118.65020537376404,
+      "pid": 41962
+    },
+    {
+      "type": "mouse_down",
+      "x": 100.0,
+      "y": 100.0,
+      "button": "left",
+      "time": 118.65022110939026,
+      "pid": 80874,
+      "template": "tpl_0008.png",
+      "ax_element": {
+        "AXRole": "AXWindow",
+        "AXTitle": "昨日重现 - 示教再现RPA",
+        "AXRoleDescription": "标准窗口"
+      },
+      "ax_actions": [
+        "AXRaise"
+      ],
+      "ocr_anchor": {
+        "text": "停止",
+        "offset_x": -6.0,
+        "offset_y": 38.0
+      }
+    },
+    {
+      "type": "mouse_drag",
+      "x": 300.0,
+      "y": 300.0,
+      "button": "left",
+      "time": 118.71700096130371,
+      "pid": 80874
+    },
+    {
+      "type": "mouse_up",
+      "x": 100.0,
+      "y": 100.0,
+      "button": "left",
+      "time": 118.71721315383911,
+      "pid": 80874
+    },
+    {
+      "type": "mouse_down",
+      "x": 200.0,
+      "y": 200.0,
+      "button": "left",
+      "time": 118.88202118873596,
+      "pid": 80874,
+      "template": "tpl_0009.png",
+      "ax_element": {
+        "AXRole": "AXWindow",
+        "AXTitle": "昨日重现 - 示教再现RPA",
+        "AXRoleDescription": "标准窗口"
+      },
+      "ax_actions": [
+        "AXRaise"
+      ],
+      "ocr_anchor": {
+        "text": "or",
+        "offset_x": 22.0,
+        "offset_y": -64.0
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 200.0,
+      "y": 200.0,
+      "button": "left",
+      "time": 119.2884452342987,
+      "pid": 80874
+    },
+    {
+      "type": "mouse_down",
+      "x": 100.0,
+      "y": 100.0,
+      "button": "left",
+      "time": 119.28870606422424,
+      "pid": 80874,
+      "template": "tpl_0010.png",
+      "ax_element": {
+        "AXRole": "AXWindow",
+        "AXTitle": "昨日重现 - 示教再现RPA",
+        "AXRoleDescription": "标准窗口"
+      },
+      "ax_actions": [
+        "AXRaise"
+      ],
+      "ocr_anchor": {
+        "text": "停止",
+        "offset_x": -6.0,
+        "offset_y": 38.0
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 100.0,
+      "y": 100.0,
+      "button": "left",
+      "time": 119.71227598190308,
+      "pid": 80874
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0006.png",
+      "time": 192.33856320381165
+    },
+    {
+      "type": "mouse_down",
+      "x": 1558.75,
+      "y": 721.25,
+      "button": "left",
+      "time": 192.20458221435547,
+      "pid": 40124,
+      "template": "tpl_0011.png",
+      "ax_element": {
+        "AXRole": "AXScrollArea",
+        "AXRoleDescription": "滚动区"
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 1560.0,
+      "y": 721.25,
+      "button": "left",
+      "time": 192.38324618339539,
+      "pid": 40124
+    },
+    {
+      "type": "mouse_down",
+      "x": 1560.0,
+      "y": 578.75,
+      "button": "left",
+      "time": 192.4296112060547,
+      "pid": 40124,
+      "template": "tpl_0012.png",
+      "ax_element": {
+        "AXRole": "AXScrollArea",
+        "AXRoleDescription": "滚动区"
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 1560.0,
+      "y": 578.75,
+      "button": "left",
+      "time": 192.5566771030426,
+      "pid": 40124
+    },
+    {
+      "type": "mouse_down",
+      "x": 1346.25,
+      "y": 798.75,
+      "button": "left",
+      "time": 193.3650963306427,
+      "pid": 41962,
+      "template": "tpl_0013.png",
+      "ax_element": {
+        "AXRole": "AXButton",
+        "AXTitle": "全部接受",
+        "AXRoleDescription": "按钮"
+      },
+      "ax_actions": [
+        "AXPress",
+        "AXShowMenu",
+        "AXScrollToVisible"
+      ],
+      "ocr_anchor": {
+        "text": "cabvpAas",
+        "offset_x": -24.25,
+        "offset_y": -19.75
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 1346.25,
+      "y": 798.75,
+      "button": "left",
+      "time": 193.86189913749695,
+      "pid": 41962
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0007.png",
+      "time": 194.87572932243347
+    },
+    {
+      "type": "mouse_down",
+      "x": 1193.75,
+      "y": 848.75,
+      "button": "left",
+      "time": 194.75538206100464,
+      "pid": 41962,
+      "template": "tpl_0014.png",
+      "ax_element": {
+        "AXRole": "AXGroup",
+        "AXRoleDescription": "组"
+      },
+      "ax_actions": [
+        "AXShowMenu",
+        "AXScrollToVisible"
+      ],
+      "ocr_anchor": {
+        "text": "上下文",
+        "offset_x": -76.75,
+        "offset_y": -11.75
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 1193.75,
+      "y": 848.75,
+      "button": "left",
+      "time": 194.89401125907898,
+      "pid": 41962
+    },
+    {
+      "type": "mouse_down",
+      "x": 443.75,
+      "y": 95.0,
+      "button": "left",
+      "time": 196.06307721138,
+      "pid": 80874,
+      "template": "tpl_0015.png",
+      "ax_element": {
+        "AXRole": "AXWindow",
+        "AXTitle": "昨日重现 - 示教再现RPA",
+        "AXRoleDescription": "标准窗口"
+      },
+      "ax_actions": [
+        "AXRaise"
+      ],
+      "ocr_anchor": {
+        "text": "停止",
+        "offset_x": 16.25,
+        "offset_y": 43.0
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 443.75,
+      "y": 95.0,
+      "button": "left",
+      "time": 196.15182423591614,
+      "pid": 80874
+    },
+    {
+      "type": "screenshot",
+      "file": "screen_0008.png",
+      "time": 199.2731921672821
+    },
+    {
+      "type": "mouse_down",
+      "x": 98.75,
+      "y": 141.25,
+      "button": "left",
+      "time": 199.13285303115845,
+      "pid": 80874,
+      "template": "tpl_0016.png",
+      "ax_element": {
+        "AXRole": "AXWindow",
+        "AXTitle": "昨日重现 - 示教再现RPA",
+        "AXRoleDescription": "标准窗口"
+      },
+      "ax_actions": [
+        "AXRaise"
+      ],
+      "ocr_anchor": {
+        "text": "停止",
+        "offset_x": -4.75,
+        "offset_y": -3.25
+      }
+    },
+    {
+      "type": "mouse_up",
+      "x": 98.75,
+      "y": 141.25,
+      "button": "left",
+      "time": 199.2919580936432,
+      "pid": 80874
+    }
+  ]
+}

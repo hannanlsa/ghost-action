@@ -3,10 +3,12 @@ import json
 import logging
 import base64
 import time
+import socket
 
 logger = logging.getLogger("ai_recognizer")
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), "GhostAction", "ai_config.json")
+LOCAL_MODEL_DIR = os.path.join(os.path.expanduser("~"), "GhostAction", "models")
 
 MODEL_REGISTRY = {
     # === 智谱 (ZhipuAI) ===
@@ -656,3 +658,301 @@ def locate_on_screen(image_path, target_description, config=None):
     except (json.JSONDecodeError, Exception) as e:
         logger.warning("AI屏幕理解定位失败: %s", e)
         return None
+
+
+# ==================== 离线AI引擎 (v1.7.0) ====================
+
+def is_online(timeout=3):
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
+def _enhance_captcha_image(image_path):
+    try:
+        import cv2
+        import numpy as np
+        img = cv2.imread(image_path)
+        if img is None:
+            return None
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+        denoised = cv2.medianBlur(binary, 3)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        cleaned = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel)
+        enhanced_path = image_path.replace(".png", "_enhanced.png")
+        cv2.imwrite(enhanced_path, cleaned)
+        return enhanced_path
+    except Exception as e:
+        logger.warning("验证码图像增强失败: %s", e)
+        return None
+
+
+def _local_ocr_recognize(image_path, lang="chi_sim+eng"):
+    try:
+        import pytesseract
+        from PIL import Image
+        enhanced = _enhance_captcha_image(image_path)
+        paths = [enhanced, image_path] if enhanced else [image_path]
+        best_result = ""
+        for p in paths:
+            img = Image.open(p)
+            configs = [
+                "--psm 7 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+                "--psm 8",
+                "--psm 7",
+                "--psm 6",
+            ]
+            for cfg in configs:
+                try:
+                    text = pytesseract.image_to_string(img, lang=lang, config=cfg).strip()
+                    if text and len(text) >= 2 and len(text) > len(best_result):
+                        best_result = text
+                except Exception:
+                    continue
+            if enhanced and os.path.exists(enhanced):
+                try:
+                    os.remove(enhanced)
+                except Exception:
+                    pass
+        if best_result:
+            logger.info("本地OCR识别: %s", best_result)
+        return best_result or None
+    except Exception as e:
+        logger.warning("本地OCR识别失败: %s", e)
+        return None
+
+
+def _trocr_available():
+    try:
+        import onnxruntime
+        encoder_path = os.path.join(LOCAL_MODEL_DIR, "trocr_encoder.onnx")
+        decoder_path = os.path.join(LOCAL_MODEL_DIR, "trocr_decoder.onnx")
+        return os.path.exists(encoder_path) and os.path.exists(decoder_path)
+    except ImportError:
+        return False
+
+
+def _trocr_recognize(image_path):
+    if not _trocr_available():
+        return None
+    try:
+        import onnxruntime as ort
+        from PIL import Image
+        import numpy as np
+
+        img = Image.open(image_path).convert("RGB").resize((384, 384))
+        pixel_values = np.array(img, dtype=np.float32).transpose(2, 0, 1) / 255.0
+        pixel_values = (pixel_values - 0.5) / 0.5
+        pixel_values = pixel_values[np.newaxis, :]
+
+        encoder_path = os.path.join(LOCAL_MODEL_DIR, "trocr_encoder.onnx")
+        decoder_path = os.path.join(LOCAL_MODEL_DIR, "trocr_decoder.onnx")
+
+        enc_session = ort.InferenceSession(encoder_path)
+        enc_out = enc_session.run(None, {"pixel_values": pixel_values.astype(np.float32)})
+
+        dec_session = ort.InferenceSession(decoder_path)
+        encoder_hidden_states = enc_out[0]
+
+        input_ids = np.array([[0]], dtype=np.int64)
+        result_tokens = []
+        for _ in range(64):
+            dec_out = dec_session.run(None, {"input_ids": input_ids, "encoder_hidden_states": encoder_hidden_states})
+            next_token = int(np.argmax(dec_out[0][0, -1]))
+            if next_token == 2:
+                break
+            result_tokens.append(next_token)
+            input_ids = np.array([[next_token]], dtype=np.int64)
+
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/trocr-small-printed")
+        text = tokenizer.decode(result_tokens, skip_special_tokens=True)
+        if text:
+            logger.info("TrOCR本地识别: %s", text)
+        return text or None
+    except Exception as e:
+        logger.warning("TrOCR识别失败: %s", e)
+        return None
+
+
+def _local_locate(target_description, image_path=None):
+    try:
+        import mss
+        import pytesseract
+        from PIL import Image
+        import numpy as np
+
+        if not image_path or not os.path.exists(image_path):
+            return None
+
+        img = Image.open(image_path)
+        width, height = img.size
+        regions = [
+            (0, 0, width, height // 3),
+            (0, height // 3, width, 2 * height // 3),
+            (0, 2 * height // 3, width, height),
+            (0, 0, width // 2, height),
+            (width // 2, 0, width, height),
+        ]
+
+        target_lower = target_description.lower()
+        for rx, ry, rw, rh in regions:
+            crop = img.crop((rx, ry, rx + rw, ry + rh))
+            data = pytesseract.image_to_data(crop, lang="chi_sim+eng", output_type=pytesseract.Output.DICT)
+            for i, text in enumerate(data["text"]):
+                if not text.strip():
+                    continue
+                if target_lower in text.lower():
+                    cx = data["left"][i] + data["width"][i] // 2 + rx
+                    cy = data["top"][i] + data["height"][i] // 2 + ry
+                    logger.info("本地OCR定位: 「%s」→ (%d, %d)", target_description, cx, cy)
+                    return (cx, cy)
+        return None
+    except Exception as e:
+        logger.warning("本地OCR定位失败: %s", e)
+        return None
+
+
+def generate_intent_offline(events, meta=None):
+    pid_names = (meta or {}).get("pid_names", {})
+    steps = []
+    for e in events:
+        etype = e.get("type")
+        win = pid_names.get(e.get("pid"), "")
+        win_label = f"在{win}中" if win else ""
+        if etype == "mouse_down":
+            ocr = e.get("ocr_anchor", {}).get("text", "")
+            ax = e.get("ax_element", {})
+            ax_title = ax.get("AXTitle", "")
+            target = ax_title or ocr or ""
+            btn = "右键" if e.get("button") == "right" else "点击"
+            steps.append(f"{win_label}{btn}「{target}」")
+        elif etype == "key_down":
+            text = e.get("text", "")
+            mods = "+".join(e.get("modifiers", []))
+            if text:
+                steps.append(f"{win_label}输入「{text}」")
+            elif mods:
+                steps.append(f"{win_label}按{mods}快捷键")
+        elif etype == "scroll":
+            steps.append(f"{win_label}滚动")
+        elif etype == "mouse_drag":
+            steps.append(f"{win_label}拖拽")
+
+    if not steps:
+        return ""
+
+    windows = set()
+    for w in pid_names.values():
+        if w:
+            windows.add(w)
+
+    intent = "、".join(windows) if windows else "桌面操作"
+    action_summary = " → ".join(steps[:5])
+    if len(steps) > 5:
+        action_summary += f" 等{len(steps)}步"
+
+    return f"意图：{intent}操作 | 步骤：{action_summary}"
+
+
+def get_ai_status(config=None):
+    if config is None:
+        config = load_config()
+    online = is_online()
+    vision_key = config.get("vision_model", "glm-4v-flash")
+    text_key = config.get("text_model", "deepseek-chat")
+    vision_info = MODEL_REGISTRY.get(vision_key, {})
+    text_info = MODEL_REGISTRY.get(text_key, {})
+    vision_api_key = _get_api_key(config, vision_info.get("provider", ""))
+    text_api_key = _get_api_key(config, text_info.get("provider", ""))
+
+    return {
+        "online": online,
+        "cloud_vision": online and bool(vision_api_key),
+        "cloud_text": online and bool(text_api_key),
+        "local_ocr": True,
+        "local_trocr": _trocr_available(),
+        "local_locate": True,
+        "offline_intent": True,
+    }
+
+
+def recognize_captcha_with_fallback(image_path=None, region=None, prompt="请识别图中的验证码，只输出验证码内容，不要输出其他文字", config=None):
+    if config is None:
+        config = load_config()
+
+    tmp_path = None
+    if not image_path and region:
+        tmp_path = os.path.join(os.path.expanduser("~"), "GhostAction", "tmp_captcha.png")
+        _screenshot_region(region[0], region[1], region[2], region[3], save_path=tmp_path)
+        image_path = tmp_path
+
+    if not image_path or not os.path.exists(image_path):
+        return None
+
+    try:
+        result = recognize_captcha(image_path=image_path, prompt=prompt, config=config)
+        if result:
+            return result
+    except Exception:
+        pass
+
+    logger.info("云端AI失败，尝试TrOCR本地识别")
+    result = _trocr_recognize(image_path)
+    if result:
+        return result
+
+    logger.info("TrOCR不可用，尝试本地OCR增强识别")
+    result = _local_ocr_recognize(image_path)
+    if result:
+        return result
+
+    return None
+
+
+def recognize_text_with_fallback(prompt, config=None):
+    if config is None:
+        config = load_config()
+
+    try:
+        result = recognize_text(prompt, config=config)
+        if result:
+            return result
+    except Exception:
+        pass
+
+    logger.info("云端文本AI失败，离网模式无法处理文本问答")
+    return None
+
+
+def generate_intent_with_fallback(events, meta=None, config=None):
+    if config is None:
+        config = load_config()
+
+    try:
+        result = generate_intent(events, meta, config=config)
+        if result:
+            return result
+    except Exception:
+        pass
+
+    logger.info("AI意图生成失败，使用规则引擎")
+    return generate_intent_offline(events, meta)
+
+
+def locate_on_screen_with_fallback(image_path, target_description, config=None):
+    if config is None:
+        config = load_config()
+
+    try:
+        result = locate_on_screen(image_path, target_description, config=config)
+        if result:
+            return result
+    except Exception:
+        pass
+
+    logger.info("AI屏幕理解失败，尝试本地OCR定位")
+    return _local_locate(target_description, image_path)
