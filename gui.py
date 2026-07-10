@@ -222,9 +222,12 @@ class AutoRepeatApp:
         self._current_events = []
         self._scripts_dir = os.path.join(os.path.expanduser("~"), "GhostAction")
         self._pid_name_map = {}
+        self._scheduler = None
+        self._skill_hotkeys = {}
 
         self._build_ui()
         self._refresh_scripts()
+        self._init_scheduler()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(3000, self._check_update)
 
@@ -282,18 +285,19 @@ class AutoRepeatApp:
 
         search_row = ttk.Frame(scripts_tab)
         search_row.pack(fill=tk.X, pady=(0, 4))
-        ttk.Label(search_row, text="🔍搜索:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Label(search_row, text="�指令:").pack(side=tk.LEFT, padx=(0, 4))
         self.script_search_var = tk.StringVar()
-        search_entry = ttk.Entry(search_row, textvariable=self.script_search_var, width=25)
-        search_entry.pack(side=tk.LEFT, padx=(0, 4))
-        search_entry.bind("<Return>", lambda e: self._search_scripts())
-        ttk.Button(search_row, text="搜索", command=self._search_scripts, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_row, text="全部", command=self._refresh_scripts, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Separator(search_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
-        ttk.Button(search_row, text="编辑", command=self._open_editor, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_row, text="重命名", command=self._rename, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_row, text="删除", command=self._delete, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_row, text="刷新", command=self._refresh_scripts, width=6).pack(side=tk.LEFT, padx=2)
+        self.search_entry = ttk.Entry(search_row, textvariable=self.script_search_var, width=30)
+        self.search_entry.pack(side=tk.LEFT, padx=(0, 4), fill=tk.X, expand=True)
+        self.search_entry.bind("<Return>", lambda e: self._nl_execute())
+        ttk.Button(search_row, text="▶ 执行", command=self._nl_execute, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="🔍搜索", command=self._search_scripts, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="全部", command=self._refresh_scripts, width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(search_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        ttk.Button(search_row, text="编辑", command=self._open_editor, width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="重命名", command=self._rename, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="删除", command=self._delete, width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="刷新", command=self._refresh_scripts, width=4).pack(side=tk.LEFT, padx=2)
 
         cols = ("name", "events", "intent", "category", "created")
         self.tree = ttk.Treeview(scripts_tab, columns=cols, show="headings", height=8)
@@ -335,9 +339,13 @@ class AutoRepeatApp:
         self.browser_tab = ttk.Frame(nb)
         nb.add(self.browser_tab, text=" 🌐 浏览器 ")
 
+        self.scheduler_tab = ttk.Frame(nb)
+        nb.add(self.scheduler_tab, text=" ⏰ 定时 ")
+
         self._build_editor()
         self._build_marketplace()
         self._build_browser_tab()
+        self._build_scheduler_tab()
         self._start_hotkey_listener()
         self._pump_ns_runloop()
 
@@ -394,6 +402,13 @@ class AutoRepeatApp:
         self.browser_profile_var = tk.StringVar(value="")
         ttk.Entry(sf_row4, textvariable=self.browser_profile_var, width=20).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(sf_row4, text="(留空=自动)", foreground="#999").pack(side=tk.LEFT, padx=4)
+
+        sf_row5 = ttk.Frame(skill_frame)
+        sf_row5.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(sf_row5, text="快捷键:").pack(side=tk.LEFT, padx=(0, 4))
+        self.hotkey_var = tk.StringVar(value="")
+        ttk.Entry(sf_row5, textvariable=self.hotkey_var, width=20).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Label(sf_row5, text="(如: Ctrl+Shift+1, 留空=无)", foreground="#999").pack(side=tk.LEFT, padx=4)
 
         filter_frame = ttk.Frame(self.editor_tab)
         filter_frame.pack(fill=tk.X, pady=(0, 4))
@@ -908,6 +923,7 @@ class AutoRepeatApp:
         self.params_var.set(params_str)
         self.engine_var.set(sm.get("engine", "auto"))
         self.browser_profile_var.set(sm.get("browser_profile", "") or "")
+        self.hotkey_var.set(sm.get("hotkey", "") or "")
 
         pid_names = data.get("meta", {}).get("pid_names", {})
         if not pid_names:
@@ -1890,6 +1906,7 @@ class AutoRepeatApp:
                 "tags": tags,
                 "engine": self.engine_var.get(),
                 "browser_profile": self.browser_profile_var.get().strip() or None,
+                "hotkey": self.hotkey_var.get().strip() or None,
             }
             self.sm.save(self._current_script_name, self._current_events, data.get("meta"), intent=data.get("intent", ""), skill_meta=skill_meta)
             self.status_var.set(f"已保存: {self._current_script_name}")
@@ -1985,6 +2002,221 @@ class AutoRepeatApp:
         except Exception:
             self.ai_status_var.set("")
         self.root.after(30000, self._update_ai_status)
+
+
+    def _nl_execute(self):
+        query = self.script_search_var.get().strip()
+        if not query:
+            self._refresh_scripts()
+            return
+        matches = self.sm.match_skill(query)
+        if not matches:
+            self.status_var.set(f"未找到匹配的Skill: {query}")
+            self._search_scripts()
+            return
+        best = matches[0]
+        name = best["name"]
+        if len(matches) > 1:
+            names = [m["name"] for m in matches[:5]]
+            if not messagebox.askyesno("匹配到多个Skill",
+                f"最佳匹配: {name}\n\n其他匹配: {', '.join(names[1:])}\n\n是否执行「{name}」？"):
+                self._search_scripts()
+                return
+        self.status_var.set(f"执行Skill: {name}")
+        self._play_by_name(name)
+
+    def _play_by_name(self, name, params_override=None):
+        data = self.sm.load(name)
+        if not data:
+            messagebox.showerror("错误", f"脚本不存在: {name}")
+            return
+        events = [e for e in data.get("events", []) if not e.get("disabled")]
+        if not events:
+            messagebox.showwarning("提示", f"脚本「{name}」没有可用步骤")
+            return
+        speed = self.speed_var.get()
+        pids = [e.get("pid") for e in events if e.get("pid")]
+        target_pid = Counter(pids).most_common(1)[0][0] if pids else None
+        data_source = data.get("meta", {}).get("data_source")
+        has_variables = any(e.get("variable") for e in events)
+
+        skill_meta = data.get("skill_meta", {})
+        skill_params = skill_meta.get("params", [])
+        user_vars = params_override or {}
+        if skill_params and not user_vars:
+            user_vars = self._ask_skill_params(name, skill_params)
+            if user_vars is None:
+                return
+
+        engine_type = skill_meta.get("engine", "auto")
+        browser_profile = skill_meta.get("browser_profile")
+        browser_engine = getattr(self, '_browser_engine', None)
+
+        if engine_type in ("browser", "browser_dom") and browser_engine and browser_engine.is_connected():
+            if browser_profile and browser_profile not in [s["id"] for s in getattr(self, '_browser_sessions', [])]:
+                sid, page = browser_engine.new_identity(headless=False)
+                if sid:
+                    self._browser_sessions.append({"id": sid, "page": page})
+                    browser_profile = sid
+            elif not browser_profile:
+                browser_profile = browser_engine.get_active_session_id()
+
+        self.player = Player(speed=speed, target_pid=target_pid, smart_replay=True,
+                             visual_match=True, scripts_dir=self._scripts_dir,
+                             retry_count=3, on_error="continue",
+                             use_ai_fallback=self.ai_fallback_var.get(),
+                             browser_engine=browser_engine if engine_type in ("browser", "browser_dom", "auto") else None,
+                             browser_profile=browser_profile)
+        self.playing = True
+        self.btn_play.configure(state=tk.DISABLED)
+        self.btn_record.configure(state=tk.DISABLED)
+        self.btn_pause.configure(state=tk.NORMAL)
+        self.btn_stop_play.configure(state=tk.NORMAL)
+        ds_info = data_source if (data_source and has_variables) else None
+        if ds_info:
+            self.status_var.set(f"数据驱动复现中... | {name} | {ds_info.get('row_count', '?')}行 | {speed}x")
+        else:
+            self.status_var.set(f"复现中... | {name} | {speed}x")
+        self.root.iconify()
+
+        def run():
+            self.player.play(events, variables=user_vars, data_source=ds_info)
+            self.root.after(0, self._on_play_done, name)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _init_scheduler(self):
+        try:
+            from scheduler import Scheduler
+            self._scheduler = Scheduler()
+            self._scheduler.start(on_trigger=self._scheduler_trigger)
+            self._load_skill_hotkeys()
+        except Exception as e:
+            logger.warning("调度器初始化失败: %s", e)
+
+    def _scheduler_trigger(self, script_name, params=None):
+        logger.info("定时触发: %s", script_name)
+        self.root.after(0, lambda: self._play_by_name(script_name, params))
+
+    def _load_skill_hotkeys(self):
+        self._skill_hotkeys = {}
+        for s in self.sm.list_all():
+            data = self.sm.load(s["name"])
+            if data:
+                sm = data.get("skill_meta", {})
+                hk = sm.get("hotkey", "")
+                if hk:
+                    self._skill_hotkeys[hk.lower()] = s["name"]
+
+    def _build_scheduler_tab(self):
+        for w in self.scheduler_tab.winfo_children():
+            w.destroy()
+
+        top = ttk.Frame(self.scheduler_tab)
+        top.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(top, text="定时任务", font=("", 11, "bold")).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Button(top, text="添加", command=self._scheduler_add, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="刷新", command=self._build_scheduler_tab, width=6).pack(side=tk.LEFT, padx=2)
+
+        cols = ("script", "cron", "enabled", "last_run", "next_run")
+        self.sched_tree = ttk.Treeview(self.scheduler_tab, columns=cols, show="headings", height=8)
+        self.sched_tree.heading("script", text="脚本")
+        self.sched_tree.heading("cron", text="定时表达式")
+        self.sched_tree.heading("enabled", text="启用")
+        self.sched_tree.heading("last_run", text="上次执行")
+        self.sched_tree.heading("next_run", text="下次执行")
+        self.sched_tree.column("script", width=150)
+        self.sched_tree.column("cron", width=150)
+        self.sched_tree.column("enabled", width=40)
+        self.sched_tree.column("last_run", width=130)
+        self.sched_tree.column("next_run", width=130)
+        self.sched_tree.pack(fill=tk.BOTH, expand=True)
+
+        action_row = ttk.Frame(self.scheduler_tab)
+        action_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(action_row, text="立即执行", command=self._scheduler_run_now, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(action_row, text="启用/禁用", command=self._scheduler_toggle, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(action_row, text="删除", command=self._scheduler_delete, width=8).pack(side=tk.LEFT, padx=2)
+
+        if self._scheduler:
+            jobs = self._scheduler.list_jobs()
+            for jid, job in jobs.items():
+                enabled_text = "Y" if job.get("enabled", True) else "N"
+                next_run = job.get("next_run", "")
+                if isinstance(next_run, (int, float)):
+                    import time as _t
+                    next_run = _t.strftime("%Y-%m-%d %H:%M", _t.localtime(next_run)) if next_run else ""
+                self.sched_tree.insert("", tk.END, iid=jid,
+                    values=(job.get("script_name", ""), job.get("cron_expr", ""),
+                            enabled_text, job.get("last_run", "-"), next_run or "-"))
+
+    def _scheduler_add(self):
+        scripts = self.sm.list_all()
+        if not scripts:
+            messagebox.showwarning("提示", "没有可用的脚本")
+            return
+        names = [s["name"] for s in scripts]
+
+        top = tk.Toplevel(self.root)
+        top.title("添加定时任务")
+        top.geometry("400x200")
+        top.transient(self.root)
+        top.grab_set()
+
+        frm = ttk.Frame(top, padding=15)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="脚本:").pack(anchor="w", pady=(0, 4))
+        script_var = tk.StringVar()
+        ttk.Combobox(frm, textvariable=script_var, values=names, width=30, state="readonly").pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(frm, text="定时表达式:").pack(anchor="w", pady=(0, 4))
+        cron_var = tk.StringVar(value="30m")
+        cron_entry = ttk.Entry(frm, textvariable=cron_var, width=30)
+        cron_entry.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(frm, text="支持: 30m=每30分钟, 2h=每2小时, 1d=每天\n或cron格式: */30 * * * *", foreground="#999").pack(anchor="w")
+
+        def _add():
+            sn = script_var.get().strip()
+            ce = cron_var.get().strip()
+            if not sn or not ce:
+                return
+            self._scheduler.add_job(sn, ce)
+            top.destroy()
+            self._build_scheduler_tab()
+            self.status_var.set(f"已添加定时任务: {sn} ({ce})")
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(btn_frm, text="添加", command=_add, width=8).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(btn_frm, text="取消", command=top.destroy, width=8).pack(side=tk.RIGHT)
+
+    def _scheduler_run_now(self):
+        sel = self.sched_tree.selection()
+        if not sel:
+            return
+        jid = sel[0]
+        job = self._scheduler.list_jobs().get(jid)
+        if job:
+            self._play_by_name(job["script_name"], job.get("params", {}))
+
+    def _scheduler_toggle(self):
+        sel = self.sched_tree.selection()
+        if not sel:
+            return
+        jid = sel[0]
+        self._scheduler.toggle_job(jid)
+        self._build_scheduler_tab()
+
+    def _scheduler_delete(self):
+        sel = self.sched_tree.selection()
+        if not sel:
+            return
+        jid = sel[0]
+        if messagebox.askyesno("确认", "删除此定时任务？"):
+            self._scheduler.remove_job(jid)
+            self._build_scheduler_tab()
+
 
     def _check_permissions(self):
         if not IS_MAC:
@@ -2255,6 +2487,8 @@ class AutoRepeatApp:
             self._stop_record()
         if self.playing:
             self._stop_play()
+        if hasattr(self, '_scheduler') and self._scheduler:
+            self._scheduler.stop()
         self.root.destroy()
 
     def _build_marketplace(self):

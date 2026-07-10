@@ -161,4 +161,41 @@ class ScriptManager:
             "tags": list(set(tags))[:5],
             "engine": engine,
             "browser_profile": None,
+            "hotkey": None,
         }
+
+    def match_skill(self, query):
+        query_lower = query.lower().strip()
+        if not query_lower:
+            return []
+        results = []
+        for s in self.list_all():
+            score = 0
+            if query_lower == s.get("name", "").lower():
+                score += 20
+            elif query_lower in s.get("name", "").lower():
+                score += 10
+            if query_lower in s.get("intent", "").lower():
+                score += 8
+                words = query_lower.split()
+                for w in words:
+                    if w in s.get("intent", "").lower():
+                        score += 3
+            for t in s.get("triggers", []):
+                if query_lower == t.lower():
+                    score += 15
+                elif query_lower in t.lower():
+                    score += 6
+                elif t.lower() in query_lower:
+                    score += 4
+            for tag in s.get("tags", []):
+                if query_lower in tag.lower():
+                    score += 5
+                elif tag.lower() in query_lower:
+                    score += 3
+            if query_lower in s.get("category", "").lower():
+                score += 3
+            if score > 0:
+                results.append((score, s))
+        results.sort(key=lambda x: -x[0])
+        return [s for _, s in results]
