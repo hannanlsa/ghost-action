@@ -4,7 +4,7 @@ import logging
 import requests
 
 APP_REPO = "hannanlsa/ghost-action"
-CURRENT_VERSION = "1.9.0"
+CURRENT_VERSION = "2.0.0"
 
 logger = logging.getLogger("marketplace")
 
