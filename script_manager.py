@@ -144,10 +144,21 @@ class ScriptManager:
                     if not any(p["name"] == var_name for p in params):
                         params.append({"name": var_name, "type": "string", "required": False, "desc": f"输入内容(默认:{text})"})
 
+        has_browser = any(e.get("is_browser") or e.get("dom_selector") for e in events)
+        has_dom = any(e.get("dom_selector") for e in events)
+
+        engine = "auto"
+        if has_browser and has_dom:
+            engine = "browser_dom"
+        elif has_browser:
+            engine = "browser"
+
         return {
             "triggers": triggers[:5],
             "params": params[:5],
             "assertions": [],
             "category": category,
             "tags": list(set(tags))[:5],
+            "engine": engine,
+            "browser_profile": None,
         }

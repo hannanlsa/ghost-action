@@ -15,7 +15,7 @@ DIST = os.path.join(ROOT, "dist")
 BUILD = os.path.join(ROOT, "build")
 
 ARCH = "x64" if sys.maxsize > 2**32 else "x86"
-VERSION = "1.7.2"
+VERSION = "1.8.0"
 
 
 def build_exe():

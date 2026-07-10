@@ -309,7 +309,7 @@ EVENT_MASK = (
 
 
 class MacRecorder:
-    def __init__(self, screenshot_interval=2.0, screenshot_dir="screenshots", ocr_anchors=True, visual_templates=True):
+    def __init__(self, screenshot_interval=2.0, screenshot_dir="screenshots", ocr_anchors=True, visual_templates=True, browser_engine=None):
         self.events = []
         self.start_time = None
         self.recording = False
@@ -336,6 +336,7 @@ class MacRecorder:
         self._raw_queue = queue.Queue()
         self._my_pid = os.getpid()
         self._target_pid = None
+        self._browser_engine = browser_engine
         os.makedirs(screenshot_dir, exist_ok=True)
 
     def start(self):
@@ -546,6 +547,9 @@ class MacRecorder:
                 wb = get_window_bounds_at_point(x, y)
                 if wb:
                     ev["window"] = wb
+                    owner = wb.get("owner", "").lower()
+                    if any(b in owner for b in ["chrome", "chromium", "edge", "firefox", "safari", "brave"]):
+                        ev["is_browser"] = True
             if modifiers:
                 ev["modifiers"] = modifiers
             if self.visual_templates:
@@ -563,6 +567,15 @@ class MacRecorder:
                             actions = get_element_actions(elem)
                             if actions:
                                 ev["ax_actions"] = actions
+                except Exception:
+                    pass
+            if self._browser_engine and self._browser_engine.is_connected():
+                try:
+                    page = self._browser_engine.get_page()
+                    if page:
+                        dom_info = self._browser_engine.get_element_at_point(page, x, y)
+                        if dom_info:
+                            ev["dom_selector"] = dom_info
                 except Exception:
                     pass
             self.events.append(ev)
@@ -604,6 +617,15 @@ class MacRecorder:
                         attrs = get_element_attrs(elem)
                         if attrs:
                             ev["ax_element"] = attrs
+                except Exception:
+                    pass
+            if self._browser_engine and self._browser_engine.is_connected():
+                try:
+                    page = self._browser_engine.get_page()
+                    if page:
+                        dom_info = self._browser_engine.get_element_at_point(page, x, y)
+                        if dom_info:
+                            ev["dom_selector"] = dom_info
                 except Exception:
                     pass
             self.events.append(ev)

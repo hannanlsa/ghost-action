@@ -143,6 +143,9 @@ def _human_event_detail(e, scripts_dir=""):
         var = e.get("variable", "")
         if var:
             parts.append(f"🔗变量:{var}")
+        dom = e.get("dom_selector")
+        if dom and dom.get("selectors"):
+            parts.append(f"🌐DOM:{dom['selectors'][0][:30]}")
         return " ".join(parts)
     elif etype == "mouse_up":
         return ""
@@ -329,8 +332,12 @@ class AutoRepeatApp:
         self.market_tab = ttk.Frame(nb)
         nb.add(self.market_tab, text=" 🏪 市场 ")
 
+        self.browser_tab = ttk.Frame(nb)
+        nb.add(self.browser_tab, text=" 🌐 浏览器 ")
+
         self._build_editor()
         self._build_marketplace()
+        self._build_browser_tab()
         self._start_hotkey_listener()
         self._pump_ns_runloop()
 
@@ -377,6 +384,16 @@ class AutoRepeatApp:
         self.params_var = tk.StringVar(value="")
         ttk.Entry(sf_row3, textvariable=self.params_var, width=50).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Label(sf_row3, text="(格式: 名称:描述, ...)", foreground="#999").pack(side=tk.LEFT, padx=4)
+
+        sf_row4 = ttk.Frame(skill_frame)
+        sf_row4.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(sf_row4, text="引擎:").pack(side=tk.LEFT, padx=(0, 4))
+        self.engine_var = tk.StringVar(value="auto")
+        ttk.Combobox(sf_row4, textvariable=self.engine_var, values=["auto", "browser_dom", "browser", "mouse"], width=12, state="readonly").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(sf_row4, text="浏览器身份:").pack(side=tk.LEFT, padx=(0, 4))
+        self.browser_profile_var = tk.StringVar(value="")
+        ttk.Entry(sf_row4, textvariable=self.browser_profile_var, width=20).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(sf_row4, text="(留空=自动)", foreground="#999").pack(side=tk.LEFT, padx=4)
 
         filter_frame = ttk.Frame(self.editor_tab)
         filter_frame.pack(fill=tk.X, pady=(0, 4))
@@ -462,7 +479,8 @@ class AutoRepeatApp:
         self.current_record_name = name
         ss_dir = os.path.join(self._scripts_dir, "scripts", f"{name}_screenshots")
         try:
-            self.recorder = Recorder(screenshot_interval=2.0, screenshot_dir=ss_dir, ocr_anchors=True, visual_templates=True)
+            self.recorder = Recorder(screenshot_interval=2.0, screenshot_dir=ss_dir, ocr_anchors=True, visual_templates=True,
+                                     browser_engine=getattr(self, '_browser_engine', None))
             self.recorder.start()
         except RuntimeError as e:
             messagebox.showerror("权限错误", f"{e}\n\n请在 系统设置 > 隐私与安全性 > 辅助功能 中添加 Terminal/Python")
@@ -716,10 +734,26 @@ class AutoRepeatApp:
         if has_variables and not data_source and not user_vars:
             messagebox.showwarning("提示", "脚本包含变量标记，但未绑定数据源。\n请在编辑器中点击「📊数据源」按钮绑定数据文件。")
             return
+
+        engine_type = skill_meta.get("engine", "auto")
+        browser_profile = skill_meta.get("browser_profile")
+        browser_engine = getattr(self, '_browser_engine', None)
+
+        if engine_type in ("browser", "browser_dom") and browser_engine and browser_engine.is_connected():
+            if browser_profile and browser_profile not in [s["id"] for s in getattr(self, '_browser_sessions', [])]:
+                sid, page = browser_engine.new_identity(headless=False)
+                if sid:
+                    self._browser_sessions.append({"id": sid, "page": page})
+                    browser_profile = sid
+            elif not browser_profile:
+                browser_profile = browser_engine.get_active_session_id()
+
         self.player = Player(speed=speed, target_pid=target_pid, smart_replay=True,
                              visual_match=True, scripts_dir=self._scripts_dir,
                              retry_count=3, on_error="continue",
-                             use_ai_fallback=self.ai_fallback_var.get())
+                             use_ai_fallback=self.ai_fallback_var.get(),
+                             browser_engine=browser_engine if engine_type in ("browser", "browser_dom", "auto") else None,
+                             browser_profile=browser_profile)
         self.playing = True
         self.btn_play.configure(state=tk.DISABLED)
         self.btn_record.configure(state=tk.DISABLED)
@@ -872,6 +906,8 @@ class AutoRepeatApp:
         params_list = sm.get("params", [])
         params_str = ",".join(f"{p.get('name','')}:{p.get('desc','')}" for p in params_list)
         self.params_var.set(params_str)
+        self.engine_var.set(sm.get("engine", "auto"))
+        self.browser_profile_var.set(sm.get("browser_profile", "") or "")
 
         pid_names = data.get("meta", {}).get("pid_names", {})
         if not pid_names:
@@ -1852,6 +1888,8 @@ class AutoRepeatApp:
                 "assertions": data.get("skill_meta", {}).get("assertions", []),
                 "category": self.category_var.get(),
                 "tags": tags,
+                "engine": self.engine_var.get(),
+                "browser_profile": self.browser_profile_var.get().strip() or None,
             }
             self.sm.save(self._current_script_name, self._current_events, data.get("meta"), intent=data.get("intent", ""), skill_meta=skill_meta)
             self.status_var.set(f"已保存: {self._current_script_name}")
@@ -1986,6 +2024,105 @@ class AutoRepeatApp:
             logger.warning("缺少权限: %s", msg)
             return False
         return True
+
+    def _build_browser_tab(self):
+        for w in self.browser_tab.winfo_children():
+            w.destroy()
+
+        try:
+            from browser_engine import BrowserEngine
+            self._browser_engine = BrowserEngine()
+            self._browser_available = self._browser_engine.is_available()
+        except ImportError:
+            self._browser_engine = None
+            self._browser_available = False
+
+        action_frame = ttk.Frame(self.browser_tab)
+        action_frame.pack(fill=tk.X, padx=8, pady=8)
+
+        ttk.Button(action_frame, text="🌐 打开新浏览器", command=self._browser_open_new, width=16).pack(side=tk.LEFT, padx=4)
+        ttk.Button(action_frame, text="🔗 连接已有浏览器", command=self._browser_connect_cdp, width=16).pack(side=tk.LEFT, padx=4)
+
+        if not self._browser_available:
+            ttk.Label(action_frame, text="（需安装: pip install playwright && playwright install chromium）",
+                      foreground="#999").pack(side=tk.LEFT, padx=8)
+
+        self._sessions_frame = ttk.LabelFrame(self.browser_tab, text="已打开的浏览器身份")
+        self._sessions_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        self._browser_sessions = []
+        self._refresh_browser_sessions()
+
+        tip_frame = ttk.Frame(self.browser_tab)
+        tip_frame.pack(fill=tk.X, padx=8, pady=4)
+        ttk.Label(tip_frame, text="💡 每点一次「打开新浏览器」= 一个全新身份（独立Cookie/指纹/登录状态）\n"
+                                   "登录不同账号用不同浏览器，互不干扰，网站无法识别是同一台电脑。",
+                  foreground="#666", wraplength=600, justify="left").pack(anchor="w", padx=4)
+
+    def _browser_open_new(self):
+        if not self._browser_engine:
+            messagebox.showwarning("提示", "Playwright未安装\n\npip install playwright\nplaywright install chromium")
+            return
+        if not self._browser_engine._check_chromium():
+            self.status_var.set("正在下载Chromium核心，请稍候...")
+            self.root.update()
+            if not self._browser_engine._install_chromium():
+                messagebox.showerror("错误", "Chromium下载失败，请检查网络连接")
+                self.status_var.set("就绪")
+                return
+            self.status_var.set("Chromium安装完成，正在启动...")
+            self.root.update()
+        session_id, page = self._browser_engine.new_identity(headless=False)
+        if page:
+            self._browser_sessions.append({"id": session_id, "page": page})
+            self._refresh_browser_sessions()
+            self.status_var.set(f"浏览器身份 {session_id} 已启动")
+        else:
+            messagebox.showerror("错误", "浏览器启动失败")
+
+    def _browser_connect_cdp(self):
+        if not self._browser_engine:
+            messagebox.showwarning("提示", "Playwright未安装")
+            return
+        url = _ask_string(self.root, "连接已有浏览器", "浏览器调试地址:", "http://localhost:9222")
+        if not url:
+            return
+        result = self._browser_engine.connect_cdp(url)
+        if result:
+            self._browser_sessions.append({"id": f"cdp-{len(self._browser_sessions)}", "page": None})
+            self._refresh_browser_sessions()
+        else:
+            messagebox.showerror("错误", "连接失败，请确认浏览器已开启远程调试")
+
+    def _browser_close_session(self, session_id):
+        if self._browser_engine:
+            self._browser_engine.close_identity(session_id)
+        self._browser_sessions = [s for s in self._browser_sessions if s["id"] != session_id]
+        self._refresh_browser_sessions()
+
+    def _refresh_browser_sessions(self):
+        if not hasattr(self, '_sessions_frame'):
+            return
+        for w in self._sessions_frame.winfo_children():
+            w.destroy()
+        if not self._browser_sessions:
+            ttk.Label(self._sessions_frame, text="暂无浏览器身份，点击上方「打开新浏览器」开始",
+                      foreground="#999").pack(padx=4, pady=8)
+            return
+        for s in self._browser_sessions:
+            row = ttk.Frame(self._sessions_frame)
+            row.pack(fill=tk.X, padx=4, pady=2)
+            url = ""
+            try:
+                url = s.get("page").url if s.get("page") else ""
+            except Exception:
+                pass
+            url_display = url[:50] + "..." if len(url) > 50 else url
+            ttk.Label(row, text=f"🧑 {s['id']}", font=("", 10, "bold")).pack(side=tk.LEFT, padx=4)
+            if url_display:
+                ttk.Label(row, text=url_display, foreground="#888").pack(side=tk.LEFT, padx=4)
+            ttk.Button(row, text="关闭", command=lambda sid=s["id"]: self._browser_close_session(sid),
+                       width=6).pack(side=tk.RIGHT, padx=4)
 
     def _start_hotkey_listener(self):
         if not IS_MAC:

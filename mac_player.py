@@ -184,7 +184,8 @@ def template_match(template_path, threshold=TEMPLATE_MATCH_THRESHOLD, multi_scal
 
 class MacPlayer:
     def __init__(self, speed=1.0, target_pid=None, smart_replay=False, visual_match=False, scripts_dir=None,
-                 retry_count=3, retry_interval=1.0, global_timeout=300, on_error="retry", use_ai_fallback=True):
+                 retry_count=3, retry_interval=1.0, global_timeout=300, on_error="retry", use_ai_fallback=True,
+                 browser_engine=None, browser_profile=None):
         self.speed = speed
         self.target_pid = target_pid
         self.smart_replay = smart_replay
@@ -195,6 +196,8 @@ class MacPlayer:
         self.global_timeout = global_timeout
         self.on_error = on_error
         self.use_ai_fallback = use_ai_fallback
+        self._browser_engine = browser_engine
+        self._browser_profile = browser_profile
         self._stop = False
         self._paused = threading.Event()
         self._paused.set()
@@ -587,12 +590,49 @@ class MacPlayer:
                 logger.info("OCR锚点太短('%s'), 跳过OCR定位", target_text)
             logger.warning("OCR定位失败: '%s', 回退原始坐标", target_text)
 
+        yolo_coords = self._yolo_locate(event)
+        if yolo_coords:
+            return yolo_coords
+
         if self.use_ai_fallback:
             ai_coords = self._ai_locate(event)
             if ai_coords:
                 return ai_coords
 
         return event["x"], event["y"]
+
+    def _yolo_locate(self, event):
+        try:
+            from ui_detector import UIDetector
+        except ImportError:
+            return None
+        try:
+            detector = UIDetector()
+            if not detector.is_available():
+                return None
+            anchor = event.get("ocr_anchor", {})
+            target_text = anchor.get("text", "")
+            ax_elem = event.get("ax_element", {})
+            target_class = None
+            role = ax_elem.get("AXRole", "")
+            if "button" in role.lower():
+                target_class = "button"
+            elif "text" in role.lower() or "field" in role.lower():
+                target_class = "input"
+            with mss.MSS() as sct:
+                screenshot = sct.grab(sct.monitors[1])
+                from PIL import Image as PILImage
+                img = PILImage.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+            result = detector.find_element(img, target_class=target_class, target_text=target_text if len(target_text) >= 2 else None)
+            if result:
+                cx = result["center"]["x"]
+                cy = result["center"]["y"]
+                logger.info("YOLO定位: class=%s conf=%.2f 原始=(%.0f,%.0f) 新=(%d,%d)",
+                            result["class"], result["confidence"], event["x"], event["y"], cx, cy)
+                return cx, cy
+        except Exception as e:
+            logger.warning("YOLO定位异常: %s", e)
+        return None
 
     def _ai_locate(self, event):
         try:
@@ -671,6 +711,8 @@ class MacPlayer:
     def _execute(self, event):
         etype = event["type"]
         pid = event.get("pid")
+        if self._try_dom_play(event):
+            return
         if etype == "mouse_down":
             self._do_mouse_down(event, pid)
         elif etype == "mouse_up":
@@ -701,6 +743,36 @@ class MacPlayer:
             pass
         elif etype == "wait_manual":
             pass
+
+    def _try_dom_play(self, event):
+        if not self._browser_engine or not self._browser_engine.is_connected():
+            return False
+        dom = event.get("dom_selector")
+        if not dom:
+            return False
+        page = self._browser_engine.get_page(self._browser_profile)
+        if not page:
+            return False
+        etype = event.get("type")
+        try:
+            if etype == "mouse_down" and dom.get("selectors"):
+                for sel in dom["selectors"]:
+                    if self._browser_engine.dom_click(page, sel, timeout=3000):
+                        logger.info("[player] DOM回放点击: %s", sel)
+                        return True
+                logger.warning("[player] DOM回放点击全部失败，降级鼠标")
+                return False
+            elif etype == "type_text" and dom.get("selectors"):
+                text = self._resolve_var(event.get("text", ""))
+                for sel in dom["selectors"]:
+                    if self._browser_engine.dom_fill(page, sel, text, timeout=3000):
+                        logger.info("[player] DOM回放输入: %s", sel)
+                        return True
+                logger.warning("[player] DOM回放输入全部失败，降级键盘")
+                return False
+        except Exception as e:
+            logger.warning("[player] DOM回放异常: %s, 降级", e)
+        return False
 
     def _do_mouse_down(self, event, pid=None):
         if pid == os.getpid():
