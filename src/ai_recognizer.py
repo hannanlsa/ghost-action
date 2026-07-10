@@ -956,3 +956,48 @@ def locate_on_screen_with_fallback(image_path, target_description, config=None):
 
     logger.info("AI屏幕理解失败，尝试本地OCR定位")
     return _local_locate(target_description, image_path)
+
+
+def generate_script_from_description(description, config=None):
+    if config is None:
+        config = load_config()
+
+    prompt = (
+        "你是一个桌面自动化脚本生成器。用户描述一个操作目标，你需要生成GhostAction脚本的事件序列（JSON数组）。\n\n"
+        "支持的事件类型和字段：\n"
+        "- mouse_down: {type, x, y, button('left'/'right'), pid, window:{owner,title}}\n"
+        "- key_down: {type, keycode, text, modifiers:['cmd','shift','ctrl','alt'], pid}\n"
+        "- type_text: {type, text, variable, pid}\n"
+        "- scroll: {type, dx, dy, pid}\n"
+        "- wait_for: {type, strategy('template'/'ocr'/'time'), timeout}\n"
+        "- comment: {type, text}\n"
+        "- set_variable: {type, name, value}\n"
+        "- for: {type, count, variable}\n"
+        "- endfor: {type}\n"
+        "- ai_recognize: {type, target, mode('vision'/'text'), prompt, variable}\n\n"
+        "规则：\n"
+        "1. 只生成用户描述的操作步骤，不要添加额外步骤\n"
+        "2. 坐标用比例值(0.0-1.0)，运行时会自动适配屏幕\n"
+        "3. 对于输入文字，优先用type_text而非key_down\n"
+        "4. 对于不确定位置的点击，用ai_recognize代替mouse_down\n"
+        "5. pid设为0，window设为{owner:'',title:''}\n"
+        "6. 每个事件必须有type字段\n\n"
+        "用户描述：{desc}\n\n"
+        "请只输出JSON数组，不要输出其他内容。如果无法生成，输出空数组[]。"
+    ).format(desc=description)
+
+    result = recognize_text(prompt, config=config)
+    if not result:
+        return None
+
+    try:
+        json_start = result.index('[')
+        json_end = result.rindex(']') + 1
+        events = json.loads(result[json_start:json_end])
+        if isinstance(events, list) and len(events) > 0:
+            logger.info("AI生成脚本: %d个事件", len(events))
+            return events
+    except (ValueError, json.JSONDecodeError) as e:
+        logger.error("AI脚本JSON解析失败: %s", e)
+
+    return None

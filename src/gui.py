@@ -224,6 +224,7 @@ class AutoRepeatApp:
         self._pid_name_map = {}
         self._scheduler = None
         self._skill_hotkeys = {}
+        self._event_watcher = None
 
         self._build_ui()
         self._refresh_scripts()
@@ -342,10 +343,14 @@ class AutoRepeatApp:
         self.scheduler_tab = ttk.Frame(nb)
         nb.add(self.scheduler_tab, text=" ⏰ 定时 ")
 
+        self.watcher_tab = ttk.Frame(nb)
+        nb.add(self.watcher_tab, text=" 👁 触发 ")
+
         self._build_editor()
         self._build_marketplace()
         self._build_browser_tab()
         self._build_scheduler_tab()
+        self._build_watcher_tab()
         self._start_hotkey_listener()
         self._pump_ns_runloop()
 
@@ -2011,8 +2016,11 @@ class AutoRepeatApp:
             return
         matches = self.sm.match_skill(query)
         if not matches:
-            self.status_var.set(f"未找到匹配的Skill: {query}")
-            self._search_scripts()
+            if messagebox.askyesno("未找到匹配Skill",
+                f"没有匹配「{query}」的Skill。\n\n是否用AI创建新脚本？"):
+                self._ai_create_script(query)
+            else:
+                self._search_scripts()
             return
         best = matches[0]
         name = best["name"]
@@ -2090,9 +2098,15 @@ class AutoRepeatApp:
             from scheduler import Scheduler
             self._scheduler = Scheduler()
             self._scheduler.start(on_trigger=self._scheduler_trigger)
-            self._load_skill_hotkeys()
         except Exception as e:
             logger.warning("调度器初始化失败: %s", e)
+        try:
+            from event_watcher import EventWatcher
+            self._event_watcher = EventWatcher(on_trigger=self._scheduler_trigger)
+            self._event_watcher.start()
+        except Exception as e:
+            logger.warning("事件监视器初始化失败: %s", e)
+        self._load_skill_hotkeys()
 
     def _scheduler_trigger(self, script_name, params=None):
         logger.info("定时触发: %s", script_name)
@@ -2216,6 +2230,138 @@ class AutoRepeatApp:
         if messagebox.askyesno("确认", "删除此定时任务？"):
             self._scheduler.remove_job(jid)
             self._build_scheduler_tab()
+
+
+
+    def _ai_create_script(self, description):
+        self.status_var.set("AI创建脚本中...")
+        self.root.update_idletasks()
+        try:
+            import ai_recognizer
+            events = ai_recognizer.generate_script_from_description(description)
+            if not events:
+                self.status_var.set("AI创建脚本失败（未配置API Key或生成失败）")
+                messagebox.showwarning("AI创建失败", "无法生成脚本。请检查AI配置或手动录制。")
+                return
+            import re
+            name = "ai_" + re.sub(r'[\s\/:*?"<>|]+', '_', description[:20]).strip('_')
+            name = name or "ai_script"
+            meta = {"pid_names": {}, "logic_chain": []}
+            intent = description
+            skill_meta = self.sm.auto_generate_skill_meta(events, meta, intent)
+            skill_meta["triggers"] = [description[:10]]
+            self.sm.save(name, events, meta, intent=intent, skill_meta=skill_meta)
+            self._refresh_scripts()
+            self.status_var.set(f"AI创建脚本成功: {name} ({len(events)}步)")
+            if messagebox.askyesno("AI脚本已创建",
+                f"脚本「{name}」已创建 ({len(events)}步)\n\n是否立即执行？"):
+                self._play_by_name(name)
+        except Exception as e:
+            self.status_var.set(f"AI创建脚本失败: {e}")
+            logger.error("AI创建脚本失败: %s", e)
+
+    def _build_watcher_tab(self):
+        for w in self.watcher_tab.winfo_children():
+            w.destroy()
+
+        top = ttk.Frame(self.watcher_tab)
+        top.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(top, text="事件触发", font=("", 11, "bold")).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Button(top, text="添加", command=self._watcher_add, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="刷新", command=self._build_watcher_tab, width=6).pack(side=tk.LEFT, padx=2)
+
+        cols = ("type", "pattern", "script", "enabled", "last_triggered")
+        self.watch_tree = ttk.Treeview(self.watcher_tab, columns=cols, show="headings", height=8)
+        self.watch_tree.heading("type", text="类型")
+        self.watch_tree.heading("pattern", text="匹配条件")
+        self.watch_tree.heading("script", text="脚本")
+        self.watch_tree.heading("enabled", text="启用")
+        self.watch_tree.heading("last_triggered", text="上次触发")
+        self.watch_tree.column("type", width=80)
+        self.watch_tree.column("pattern", width=200)
+        self.watch_tree.column("script", width=150)
+        self.watch_tree.column("enabled", width=40)
+        self.watch_tree.column("last_triggered", width=130)
+        self.watch_tree.pack(fill=tk.BOTH, expand=True)
+
+        action_row = ttk.Frame(self.watcher_tab)
+        action_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Button(action_row, text="启用/禁用", command=self._watcher_toggle, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(action_row, text="删除", command=self._watcher_delete, width=8).pack(side=tk.LEFT, padx=2)
+
+        type_names = {"file": "文件", "clipboard": "剪贴板", "window": "窗口"}
+        if self._event_watcher:
+            watchers = self._event_watcher.list_watchers()
+            for wid, w in watchers.items():
+                enabled_text = "Y" if w.get("enabled", True) else "N"
+                tname = type_names.get(w.get("type", ""), w.get("type", ""))
+                self.watch_tree.insert("", tk.END, iid=wid,
+                    values=(tname, w.get("pattern", ""), w.get("script_name", ""),
+                            enabled_text, w.get("last_triggered", "-")))
+
+    def _watcher_add(self):
+        scripts = self.sm.list_all()
+        if not scripts:
+            messagebox.showwarning("提示", "没有可用的脚本")
+            return
+        names = [s["name"] for s in scripts]
+
+        top = tk.Toplevel(self.root)
+        top.title("添加事件触发")
+        top.geometry("420x250")
+        top.transient(self.root)
+        top.grab_set()
+
+        frm = ttk.Frame(top, padding=15)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="触发类型:").pack(anchor="w", pady=(0, 4))
+        type_var = tk.StringVar(value="file")
+        type_combo = ttk.Combobox(frm, textvariable=type_var,
+            values=["file", "clipboard", "window"], width=15, state="readonly")
+        type_combo.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(frm, text="匹配条件:").pack(anchor="w", pady=(0, 4))
+        pattern_var = tk.StringVar()
+        ttk.Entry(frm, textvariable=pattern_var, width=40).pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(frm, text="文件=路径, 剪贴板=关键词, 窗口=窗口名", foreground="#999").pack(anchor="w", pady=(0, 8))
+
+        ttk.Label(frm, text="执行脚本:").pack(anchor="w", pady=(0, 4))
+        script_var = tk.StringVar()
+        ttk.Combobox(frm, textvariable=script_var, values=names, width=30, state="readonly").pack(fill=tk.X)
+
+        def _add():
+            wt = type_var.get().strip()
+            pat = pattern_var.get().strip()
+            sn = script_var.get().strip()
+            if not wt or not sn:
+                return
+            self._event_watcher.add_watcher(wt, pat, sn)
+            top.destroy()
+            self._build_watcher_tab()
+            self.status_var.set(f"已添加事件触发: {wt} -> {sn}")
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(btn_frm, text="添加", command=_add, width=8).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(btn_frm, text="取消", command=top.destroy, width=8).pack(side=tk.RIGHT)
+
+    def _watcher_toggle(self):
+        sel = self.watch_tree.selection()
+        if not sel:
+            return
+        wid = sel[0]
+        self._event_watcher.toggle_watcher(wid)
+        self._build_watcher_tab()
+
+    def _watcher_delete(self):
+        sel = self.watch_tree.selection()
+        if not sel:
+            return
+        wid = sel[0]
+        if messagebox.askyesno("确认", "删除此事件触发规则？"):
+            self._event_watcher.remove_watcher(wid)
+            self._build_watcher_tab()
 
 
     def _check_permissions(self):
@@ -2489,6 +2635,8 @@ class AutoRepeatApp:
             self._stop_play()
         if hasattr(self, '_scheduler') and self._scheduler:
             self._scheduler.stop()
+        if hasattr(self, '_event_watcher') and self._event_watcher:
+            self._event_watcher.stop()
         self.root.destroy()
 
     def _build_marketplace(self):
