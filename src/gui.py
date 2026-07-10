@@ -273,14 +273,28 @@ class AutoRepeatApp:
         scripts_tab = ttk.Frame(nb)
         nb.add(scripts_tab, text=" 脚本列表 ")
 
-        cols = ("name", "events", "created")
+        search_row = ttk.Frame(scripts_tab)
+        search_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(search_row, text="🔍搜索:").pack(side=tk.LEFT, padx=(0, 4))
+        self.script_search_var = tk.StringVar()
+        search_entry = ttk.Entry(search_row, textvariable=self.script_search_var, width=25)
+        search_entry.pack(side=tk.LEFT, padx=(0, 4))
+        search_entry.bind("<Return>", lambda e: self._search_scripts())
+        ttk.Button(search_row, text="搜索", command=self._search_scripts, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="全部", command=self._refresh_scripts, width=6).pack(side=tk.LEFT, padx=2)
+
+        cols = ("name", "events", "intent", "category", "created")
         self.tree = ttk.Treeview(scripts_tab, columns=cols, show="headings", height=8)
         self.tree.heading("name", text="脚本名")
-        self.tree.heading("events", text="步骤数")
+        self.tree.heading("events", text="步骤")
+        self.tree.heading("intent", text="意图")
+        self.tree.heading("category", text="分类")
         self.tree.heading("created", text="创建时间")
-        self.tree.column("name", width=250)
-        self.tree.column("events", width=80)
-        self.tree.column("created", width=180)
+        self.tree.column("name", width=150)
+        self.tree.column("events", width=40)
+        self.tree.column("intent", width=220)
+        self.tree.column("category", width=60)
+        self.tree.column("created", width=130)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         sb = ttk.Scrollbar(scripts_tab, orient=tk.VERTICAL, command=self.tree.yview)
@@ -322,6 +336,33 @@ class AutoRepeatApp:
         self.intent_entry = ttk.Entry(intent_frame, textvariable=self.intent_var, width=60)
         self.intent_entry.pack(side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True)
         ttk.Button(intent_frame, text="🤖重新生成", command=self._regenerate_intent, width=10).pack(side=tk.LEFT, padx=2)
+
+        skill_frame = ttk.LabelFrame(self.editor_tab, text="⚡ Skill元数据")
+        skill_frame.pack(fill=tk.X, pady=(0, 4))
+
+        sf_row1 = ttk.Frame(skill_frame)
+        sf_row1.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(sf_row1, text="触发词:").pack(side=tk.LEFT, padx=(0, 4))
+        self.triggers_var = tk.StringVar(value="")
+        ttk.Entry(sf_row1, textvariable=self.triggers_var, width=50).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(sf_row1, text="(逗号分隔)", foreground="#999").pack(side=tk.LEFT, padx=4)
+
+        sf_row2 = ttk.Frame(skill_frame)
+        sf_row2.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(sf_row2, text="分类:").pack(side=tk.LEFT, padx=(0, 4))
+        self.category_var = tk.StringVar(value="")
+        ttk.Combobox(sf_row2, textvariable=self.category_var, values=["通讯", "浏览器", "办公", "文件管理", "开发", "设计", "其他"], width=10, state="readonly").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(sf_row2, text="标签:").pack(side=tk.LEFT, padx=(0, 4))
+        self.tags_var = tk.StringVar(value="")
+        ttk.Entry(sf_row2, textvariable=self.tags_var, width=30).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(sf_row2, text="(逗号分隔)", foreground="#999").pack(side=tk.LEFT, padx=4)
+
+        sf_row3 = ttk.Frame(skill_frame)
+        sf_row3.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(sf_row3, text="参数:").pack(side=tk.LEFT, padx=(0, 4))
+        self.params_var = tk.StringVar(value="")
+        ttk.Entry(sf_row3, textvariable=self.params_var, width=50).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(sf_row3, text="(格式: 名称:描述, ...)", foreground="#999").pack(side=tk.LEFT, padx=4)
 
         filter_frame = ttk.Frame(self.editor_tab)
         filter_frame.pack(fill=tk.X, pady=(0, 4))
@@ -462,7 +503,7 @@ class AutoRepeatApp:
         except Exception as e:
             logger.warning("AI意图生成失败: %s", e)
 
-        self.sm.save(self.current_record_name, events, meta, intent=intent)
+        self.sm.save(self.current_record_name, events, meta, intent=intent, skill_meta=self.sm.auto_generate_skill_meta(events, meta, intent))
         self.btn_record.configure(text="● 识别")
         self.btn_play.configure(state=tk.NORMAL)
         self.status_var.set(f"识别完成 | {click_count}点击 {key_count}按键 {drag_count}拖拽")
@@ -643,7 +684,16 @@ class AutoRepeatApp:
         target_pid = Counter(pids).most_common(1)[0][0] if pids else None
         data_source = data.get("meta", {}).get("data_source")
         has_variables = any(e.get("variable") for e in events)
-        if has_variables and not data_source:
+
+        skill_meta = data.get("skill_meta", {})
+        skill_params = skill_meta.get("params", [])
+        user_vars = {}
+        if skill_params:
+            user_vars = self._ask_skill_params(name, skill_params)
+            if user_vars is None:
+                return
+
+        if has_variables and not data_source and not user_vars:
             messagebox.showwarning("提示", "脚本包含变量标记，但未绑定数据源。\n请在编辑器中点击「📊数据源」按钮绑定数据文件。")
             return
         self.player = Player(speed=speed, target_pid=target_pid, smart_replay=True,
@@ -663,7 +713,7 @@ class AutoRepeatApp:
         self.root.iconify()
 
         def run():
-            self.player.play(events, variables={}, data_source=ds_info)
+            self.player.play(events, variables=user_vars, data_source=ds_info)
             self.root.after(0, self._on_play_done, name)
 
         threading.Thread(target=run, daemon=True).start()
@@ -716,7 +766,19 @@ class AutoRepeatApp:
         for item in self.tree.get_children():
             self.tree.delete(item)
         for s in self.sm.list_all():
-            self.tree.insert("", tk.END, values=(s["name"], s["events"], s["created"]))
+            intent_short = (s.get("intent", "")[:30] + "...") if len(s.get("intent", "")) > 30 else s.get("intent", "")
+            self.tree.insert("", tk.END, values=(s["name"], s["events"], intent_short, s.get("category", ""), s["created"]))
+
+    def _search_scripts(self):
+        query = self.script_search_var.get().strip()
+        if not query:
+            self._refresh_scripts()
+            return
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for s in self.sm.search(query):
+            intent_short = (s.get("intent", "")[:30] + "...") if len(s.get("intent", "")) > 30 else s.get("intent", "")
+            self.tree.insert("", tk.END, values=(s["name"], s["events"], intent_short, s.get("category", ""), s["created"]))
 
     def _rename(self):
         sel = self.tree.selection()
@@ -777,6 +839,13 @@ class AutoRepeatApp:
         self._current_events = data.get("events", [])
         self.editor_title_var.set(f"编辑: {name} ({len(self._current_events)} 步)")
         self.intent_var.set(data.get("intent", ""))
+        sm = data.get("skill_meta", {})
+        self.triggers_var.set(",".join(sm.get("triggers", [])))
+        self.category_var.set(sm.get("category", ""))
+        self.tags_var.set(",".join(sm.get("tags", [])))
+        params_list = sm.get("params", [])
+        params_str = ",".join(f"{p.get('name','')}:{p.get('desc','')}" for p in params_list)
+        self.params_var.set(params_str)
 
         pid_names = data.get("meta", {}).get("pid_names", {})
         if not pid_names and get_visible_windows:
@@ -1731,7 +1800,26 @@ class AutoRepeatApp:
             data["events"] = self._current_events
             data["event_count"] = len(self._current_events)
             data["intent"] = self.intent_var.get()
-            self.sm.save(self._current_script_name, self._current_events, data.get("meta"), intent=data.get("intent", ""))
+            triggers = [t.strip() for t in self.triggers_var.get().split(",") if t.strip()]
+            tags = [t.strip() for t in self.tags_var.get().split(",") if t.strip()]
+            params_raw = self.params_var.get().strip()
+            params = []
+            if params_raw:
+                for p in params_raw.split(","):
+                    p = p.strip()
+                    if ":" in p:
+                        pname, pdesc = p.split(":", 1)
+                        params.append({"name": pname.strip(), "type": "string", "required": False, "desc": pdesc.strip()})
+                    elif p:
+                        params.append({"name": p, "type": "string", "required": False, "desc": ""})
+            skill_meta = {
+                "triggers": triggers,
+                "params": params,
+                "assertions": data.get("skill_meta", {}).get("assertions", []),
+                "category": self.category_var.get(),
+                "tags": tags,
+            }
+            self.sm.save(self._current_script_name, self._current_events, data.get("meta"), intent=data.get("intent", ""), skill_meta=skill_meta)
             self.status_var.set(f"已保存: {self._current_script_name}")
             self._refresh_scripts()
 
@@ -1756,6 +1844,52 @@ class AutoRepeatApp:
         except Exception as e:
             logger.warning("AI意图重新生成失败: %s", e)
             self.status_var.set(f"AI意图生成失败: {e}")
+
+    def _ask_skill_params(self, script_name, params):
+        top = tk.Toplevel(self.root)
+        top.title(f"⚡ Skill参数: {script_name}")
+        top.geometry("400x300")
+        top.transient(self.root)
+        top.grab_set()
+        result = [None]
+
+        frm = ttk.Frame(top, padding=12)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text=f"执行Skill: {script_name}", font=("", 10, "bold")).pack(anchor="w", pady=(0, 8))
+
+        entries = {}
+        for p in params:
+            row = ttk.Frame(frm)
+            row.pack(fill=tk.X, pady=3)
+            label = p.get("desc", p.get("name", ""))
+            ttk.Label(row, text=f"{label}:").pack(side=tk.LEFT, padx=(0, 4))
+            var = tk.StringVar(value="")
+            ttk.Entry(row, textvariable=var, width=25).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            entries[p.get("name", "")] = var
+
+        if not params:
+            ttk.Label(frm, text="此Skill无需参数", foreground="#999").pack(anchor="w")
+
+        def _confirm():
+            vals = {}
+            for name, var in entries.items():
+                v = var.get().strip()
+                if v:
+                    vals[name] = v
+            result[0] = vals
+            top.destroy()
+
+        def _cancel():
+            top.destroy()
+
+        btn_frm = ttk.Frame(frm)
+        btn_frm.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(btn_frm, text="执行", command=_confirm, width=8).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(btn_frm, text="取消", command=_cancel, width=8).pack(side=tk.RIGHT)
+
+        top.wait_window()
+        return result[0]
 
     def _check_permissions(self):
         if not IS_MAC:
