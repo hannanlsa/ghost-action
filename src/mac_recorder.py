@@ -37,6 +37,69 @@ OCR_REGION_SIZE = 200
 TEMPLATE_SIZE = 80
 DRAG_SAMPLE_MIN_DIST = 5
 
+
+def _infer_intent(event):
+    etype = event.get("type", "")
+    ax = event.get("ax_element", {})
+    dom = event.get("dom_selector", {})
+    modifiers = event.get("modifiers", [])
+    button = event.get("button", "left")
+
+    if etype == "mouse_down":
+        ax_role = (ax.get("AXRole", "")).lower()
+        ax_title = ax.get("AXTitle", "")
+        ax_desc = ax.get("AXDescription", "")
+        if "button" in ax_role:
+            label = ax_title or ax_desc
+            return f"点击按钮「{label}」" if label else "点击按钮"
+        if "menuitem" in ax_role:
+            label = ax_title or ax_desc
+            return f"选择菜单「{label}」" if label else "选择菜单项"
+        if "checkbox" in ax_role or "radio" in ax_role:
+            label = ax_title or ax_desc
+            return f"勾选「{label}」" if label else "勾选选项"
+        if "tab" in ax_role:
+            label = ax_title or ax_desc
+            return f"切换标签「{label}」" if label else "切换标签"
+        if "link" in ax_role:
+            label = ax_title or ax_desc
+            return f"点击链接「{label}」" if label else "点击链接"
+        if "text" in ax_role or "field" in ax_role or "combobox" in ax_role:
+            label = ax_title or ax_desc
+            return f"聚焦输入框「{label}」" if label else "聚焦输入框"
+        if "slider" in ax_role:
+            return "拖动滑块"
+        if button == "right":
+            return "右键点击"
+        if dom.get("selectors"):
+            return "点击网页元素"
+        return "点击"
+    elif etype == "type_text":
+        text = event.get("text", "")
+        if text:
+            preview = text[:20] + ("..." if len(text) > 20 else "")
+            return f"输入文本「{preview}」"
+        return "输入文本"
+    elif etype == "key_down":
+        if "cmd" in modifiers:
+            key_name = event.get("text", "")
+            shortcut = f"Cmd+{key_name.upper()}" if key_name else "Cmd+快捷键"
+            return f"快捷键「{shortcut}」"
+        if "ctrl" in modifiers:
+            key_name = event.get("text", "")
+            shortcut = f"Ctrl+{key_name.upper()}" if key_name else "Ctrl+快捷键"
+            return f"快捷键「{shortcut}」"
+        return "按键"
+    elif etype == "scroll":
+        dy = event.get("dy", 0)
+        direction = "向下滚动" if dy > 0 else "向上滚动"
+        return direction
+    elif etype == "mouse_drag":
+        return "拖动"
+    elif etype == "mouse_up":
+        return None
+    return None
+
 MODIFIER_FLAGS = {
     "cmd": kCGEventFlagMaskCommand,
     "shift": kCGEventFlagMaskShift,
@@ -578,6 +641,9 @@ class MacRecorder:
                             ev["dom_selector"] = dom_info
                 except Exception:
                     pass
+            intent = _infer_intent(ev)
+            if intent:
+                ev["intent"] = intent
             self.events.append(ev)
             if self.ocr_anchors:
                 self._ocr_queue.append((idx, x, y))
@@ -590,6 +656,9 @@ class MacRecorder:
             }
             if modifiers:
                 ev["modifiers"] = modifiers
+            intent = _infer_intent(ev)
+            if intent:
+                ev["intent"] = intent
             self.events.append(ev)
         elif event_type == kCGEventRightMouseDown:
             self._dragging = True
@@ -628,6 +697,9 @@ class MacRecorder:
                             ev["dom_selector"] = dom_info
                 except Exception:
                     pass
+            intent = _infer_intent(ev)
+            if intent:
+                ev["intent"] = intent
             self.events.append(ev)
             if self.ocr_anchors:
                 self._ocr_queue.append((idx, x, y))
@@ -640,25 +712,32 @@ class MacRecorder:
             }
             if modifiers:
                 ev["modifiers"] = modifiers
+            intent = _infer_intent(ev)
+            if intent:
+                ev["intent"] = intent
             self.events.append(ev)
         elif event_type in (kCGEventLeftMouseDragged, kCGEventRightMouseDragged, kCGEventOtherMouseDragged):
             ddx = x - self._drag_last_x
             ddy = y - self._drag_last_y
             if ddx * ddx + ddy * ddy >= DRAG_SAMPLE_MIN_DIST * DRAG_SAMPLE_MIN_DIST:
                 pid = self._last_pid
-                self.events.append({
+                drag_ev = {
                     "type": "mouse_drag", "x": x, "y": y,
                     "button": self._drag_button or "left",
                     "time": elapsed, "pid": pid,
-                })
+                }
+                drag_ev["intent"] = _infer_intent(drag_ev) or "拖动"
+                self.events.append(drag_ev)
                 self._drag_last_x = x
                 self._drag_last_y = y
         elif event_type == kCGEventScrollWheel:
             pid = self._last_pid
-            self.events.append({
+            scroll_ev = {
                 "type": "scroll", "x": x, "y": y,
                 "dx": dx, "dy": dy, "time": elapsed, "pid": pid,
-            })
+            }
+            scroll_ev["intent"] = _infer_intent(scroll_ev) or "滚动"
+            self.events.append(scroll_ev)
         elif event_type == kCGEventKeyDown:
             pid = self._last_pid
             if keycode == 111:
@@ -674,6 +753,9 @@ class MacRecorder:
                 ev["modifiers"] = modifiers
             if unicode_char:
                 ev["text"] = unicode_char
+            intent = _infer_intent(ev)
+            if intent:
+                ev["intent"] = intent
             self.events.append(ev)
         elif event_type == kCGEventKeyUp:
             pid = self._last_pid

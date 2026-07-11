@@ -15,6 +15,36 @@ logger = logging.getLogger("win_recorder")
 OCR_REGION_SIZE = 200
 TEMPLATE_SIZE = 80
 
+
+def _infer_intent(event):
+    etype = event.get("type", "")
+    button = event.get("button", "left")
+    modifiers = event.get("modifiers", [])
+    if etype == "mouse_down":
+        if button == "right":
+            return "右键点击"
+        return "点击"
+    elif etype == "type_text":
+        text = event.get("text", "")
+        if text:
+            preview = text[:20] + ("..." if len(text) > 20 else "")
+            return f"输入文本「{preview}」"
+        return "输入文本"
+    elif etype == "key_down":
+        if "ctrl" in modifiers:
+            key_name = event.get("key_name", "")
+            return f"快捷键「Ctrl+{key_name}」"
+        if "alt" in modifiers:
+            key_name = event.get("key_name", "")
+            return f"快捷键「Alt+{key_name}」"
+        return "按键"
+    elif etype == "scroll":
+        dy = event.get("dy", 0)
+        return "向下滚动" if dy > 0 else "向上滚动"
+    elif etype == "mouse_drag":
+        return "拖动"
+    return None
+
 user32 = windll.user32
 kernel32 = windll.kernel32
 
@@ -335,6 +365,9 @@ class WinRecorder:
             if tpl:
                 ev["template"] = tpl
                 self._template_count += 1
+        intent = _infer_intent(ev)
+        if intent:
+            ev["intent"] = intent
         self.events.append(ev)
         self._dragging = True
         self._drag_button = button
@@ -352,6 +385,7 @@ class WinRecorder:
         if abs(x - self._drag_last_x) < 5 and abs(y - self._drag_last_y) < 5:
             return
         ev = {"type": "mouse_drag", "x": x, "y": y, "button": self._drag_button, "time": t}
+        ev["intent"] = _infer_intent(ev) or "拖动"
         self.events.append(ev)
         self._drag_last_x = x
         self._drag_last_y = y
@@ -360,6 +394,7 @@ class WinRecorder:
         win = self._get_window_info(x, y)
         ev = {"type": "scroll", "x": x, "y": y, "dx": 0, "dy": delta, "time": t}
         ev.update(win)
+        ev["intent"] = _infer_intent(ev) or "滚动"
         self.events.append(ev)
 
     def _on_key_down(self, vk, mods, t):
@@ -371,6 +406,9 @@ class WinRecorder:
         key_name = VK_MAP.get(vk, f"Key{vk}")
 
         ev = {"type": "key_down", "keycode": vk, "text": text, "modifiers": mods, "time": t, "key_name": key_name}
+        intent = _infer_intent(ev)
+        if intent:
+            ev["intent"] = intent
         self.events.append(ev)
 
     def _on_key_up(self, vk, mods, t):

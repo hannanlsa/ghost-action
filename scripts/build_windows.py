@@ -15,7 +15,7 @@ DIST = os.path.join(ROOT, "dist")
 BUILD = os.path.join(ROOT, "build")
 
 ARCH = "x64" if sys.maxsize > 2**32 else "x86"
-VERSION = "1.8.0"
+VERSION = "2.0.10"
 
 
 def build_exe():
@@ -24,7 +24,7 @@ def build_exe():
         os.path.join(ROOT, "main.py"),
         "--name=GhostAction",
         "--windowed",
-        "--onefile",
+        "--onedir",
         "--noconfirm",
         f"--add-data={SRC}{os.pathsep}src",
         "--hidden-import=PIL._tkinter_finder",
@@ -41,6 +41,14 @@ def build_exe():
         "--hidden-import=requests",
         "--hidden-import=openpyxl",
         "--hidden-import=pyperclip",
+        "--hidden-import=playwright",
+        "--hidden-import=playwright.sync_api",
+        "--hidden-import=browser_engine",
+        "--hidden-import=ui_detector",
+        "--hidden-import=onnxruntime",
+        "--hidden-import=adaptive_engine",
+        "--hidden-import=scheduler",
+        "--hidden-import=event_watcher",
         f"--distpath={DIST}",
         f"--workpath={BUILD}",
         f"--specpath={ROOT}",

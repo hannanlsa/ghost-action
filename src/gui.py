@@ -83,6 +83,8 @@ else:
 from script_manager import ScriptManager
 
 logger = logging.getLogger("gui")
+action_log = logging.getLogger("action")
+sync_log = logging.getLogger("sync")
 
 KEYCODE_NAMES = {
     0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
@@ -136,16 +138,14 @@ def _human_event_detail(e, scripts_dir=""):
         if anchor and anchor.get("text"):
             parts.append(f"附近文字:「{anchor['text']}」")
         tpl = e.get("template")
-        if tpl and scripts_dir:
-            tpl_path = os.path.join(scripts_dir, "templates", tpl)
-            if os.path.exists(tpl_path):
-                parts.append("📸有截图")
+        if tpl:
+            parts.append("[截图]有截图")
         var = e.get("variable", "")
         if var:
-            parts.append(f"🔗变量:{var}")
+            parts.append(f"[循环]变量:{var}")
         dom = e.get("dom_selector")
         if dom and dom.get("selectors"):
-            parts.append(f"🌐DOM:{dom['selectors'][0][:30]}")
+            parts.append(f"[浏览器]DOM:{dom['selectors'][0][:30]}")
         return " ".join(parts)
     elif etype == "mouse_up":
         return ""
@@ -168,7 +168,7 @@ def _human_event_detail(e, scripts_dir=""):
             return f"输入变量「{var}」→ {text}"
         return f"输入文字「{text}」"
     elif etype == "screenshot":
-        return "📸 自动截图"
+        return "[截图] 自动截图"
     elif etype == "wait_for":
         return f"等待 {e.get('strategy', 'template')} 超时={e.get('timeout', 10)}s"
     elif etype == "assert_that":
@@ -192,13 +192,13 @@ def _human_event_detail(e, scripts_dir=""):
     elif etype == "call_script":
         return f"调用脚本「{e.get('script_name', '')}」"
     elif etype == "comment":
-        return f"💬 {e.get('text', '')}"
+        return f"[注释] {e.get('text', '')}"
     elif etype == "ai_recognize":
         target = e.get("target", "验证码")
         var = e.get("variable", "")
-        return f"🤖 AI识别{target}" + (f" → {var}" if var else "")
+        return f"[AI] AI识别{target}" + (f" → {var}" if var else "")
     elif etype == "wait_manual":
-        return f"⏸ 等待人工: {e.get('description', '请手动操作后继续')}"
+        return f"|| 等待人工: {e.get('description', '请手动操作后继续')}"
     return etype
 
 
@@ -206,7 +206,7 @@ class AutoRepeatApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GhostAction")
-        self.root.geometry("900x700")
+        self.root.geometry("1100x750")
         self.root.resizable(True, True)
 
         self.recorder = None
@@ -242,10 +242,10 @@ class AutoRepeatApp:
         self.btn_record = ttk.Button(ctrl, text="● 识别", command=self._toggle_record, width=12)
         self.btn_record.pack(side=tk.LEFT, padx=(0, 6))
 
-        self.btn_play = ttk.Button(ctrl, text="▶ 复现", command=self._play, width=12)
+        self.btn_play = ttk.Button(ctrl, text="> 复现", command=self._play, width=12)
         self.btn_play.pack(side=tk.LEFT, padx=(0, 6))
 
-        self.btn_pause = ttk.Button(ctrl, text="⏸ 暂停", command=self._toggle_pause, width=8, state=tk.DISABLED)
+        self.btn_pause = ttk.Button(ctrl, text="|| 暂停", command=self._toggle_pause, width=8, state=tk.DISABLED)
         self.btn_pause.pack(side=tk.LEFT, padx=(0, 6))
 
         self.btn_stop_play = ttk.Button(ctrl, text="⏹ 停止", command=self._stop_play, width=8, state=tk.DISABLED)
@@ -291,8 +291,8 @@ class AutoRepeatApp:
         self.search_entry = ttk.Entry(search_row, textvariable=self.script_search_var, width=30)
         self.search_entry.pack(side=tk.LEFT, padx=(0, 4), fill=tk.X, expand=True)
         self.search_entry.bind("<Return>", lambda e: self._nl_execute())
-        ttk.Button(search_row, text="▶ 执行", command=self._nl_execute, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_row, text="🔍搜索", command=self._search_scripts, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="> 执行", command=self._nl_execute, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="[搜索]搜索", command=self._search_scripts, width=6).pack(side=tk.LEFT, padx=2)
         ttk.Button(search_row, text="全部", command=self._refresh_scripts, width=4).pack(side=tk.LEFT, padx=2)
         ttk.Separator(search_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
         ttk.Button(search_row, text="编辑", command=self._open_editor, width=4).pack(side=tk.LEFT, padx=2)
@@ -335,16 +335,16 @@ class AutoRepeatApp:
         nb.add(self.editor_tab, text=" 编辑 ")
 
         self.market_tab = ttk.Frame(nb)
-        nb.add(self.market_tab, text=" 🏪 市场 ")
+        nb.add(self.market_tab, text=" [市场] 市场 ")
 
         self.browser_tab = ttk.Frame(nb)
-        nb.add(self.browser_tab, text=" 🌐 浏览器 ")
+        nb.add(self.browser_tab, text=" [浏览器] 浏览器 ")
 
         self.scheduler_tab = ttk.Frame(nb)
         nb.add(self.scheduler_tab, text=" ⏰ 定时 ")
 
         self.watcher_tab = ttk.Frame(nb)
-        nb.add(self.watcher_tab, text=" 👁 触发 ")
+        nb.add(self.watcher_tab, text=" [监视] 触发 ")
 
         self._build_editor()
         self._build_marketplace()
@@ -363,13 +363,19 @@ class AutoRepeatApp:
         self.editor_title_var = tk.StringVar(value="未加载脚本")
         ttk.Label(top_frame, textvariable=self.editor_title_var, font=("", 11, "bold")).pack(side=tk.LEFT)
 
-        intent_frame = ttk.Frame(self.editor_tab)
-        intent_frame.pack(fill=tk.X, pady=(0, 2))
-        ttk.Label(intent_frame, text="🧠 意图:", font=("", 9)).pack(side=tk.LEFT, padx=(0, 4))
+        intent_frame = ttk.LabelFrame(self.editor_tab, text="逻辑链条 (可编辑)", padding=4)
+        intent_frame.pack(fill=tk.X, pady=(0, 4))
+        intent_btn_row = ttk.Frame(intent_frame)
+        intent_btn_row.pack(fill=tk.X)
+        ttk.Button(intent_btn_row, text="从步骤生成", command=self._regenerate_intent, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intent_btn_row, text="AI优化", command=self._ai_optimize_intent, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intent_btn_row, text="保存文本", command=self._save_intent_text, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intent_btn_row, text="弹出编辑", command=self._popup_intent_editor, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intent_btn_row, text="按窗口拆分", command=self._split_by_window, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intent_btn_row, text="窗口黑名单", command=self._edit_window_blacklist, width=10).pack(side=tk.LEFT, padx=2)
+        self.intent_text = tk.Text(intent_frame, height=3, wrap=tk.WORD, font=("", 10))
+        self.intent_text.pack(fill=tk.X, pady=(2, 0))
         self.intent_var = tk.StringVar(value="")
-        self.intent_entry = ttk.Entry(intent_frame, textvariable=self.intent_var, width=60)
-        self.intent_entry.pack(side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True)
-        ttk.Button(intent_frame, text="🤖重新生成", command=self._regenerate_intent, width=10).pack(side=tk.LEFT, padx=2)
 
         skill_frame = ttk.LabelFrame(self.editor_tab, text="⚡ Skill元数据")
         skill_frame.pack(fill=tk.X, pady=(0, 4))
@@ -436,17 +442,21 @@ class AutoRepeatApp:
         ttk.Button(btn_row1, text="断言", command=self._editor_insert_assert, width=5).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row1, text="循环", command=self._editor_insert_for, width=5).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row1, text="注释", command=self._editor_insert_comment, width=5).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row1, text="💾保存", command=self._editor_save, width=6).pack(side=tk.RIGHT, padx=2)
+        ttk.Button(btn_row1, text="[保存]保存", command=self._editor_save, width=6).pack(side=tk.RIGHT, padx=2)
 
         btn_row2 = ttk.Frame(self.editor_tab)
         btn_row2.pack(fill=tk.X, pady=(0, 4))
         ttk.Button(btn_row2, text="➕点选添加", command=self._editor_pick_element, width=9).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row2, text="🔗变量", command=self._editor_bind_variable, width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row2, text="📊数据源", command=self._editor_set_data_source, width=7).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row2, text="🤖AI识别", command=self._editor_insert_ai_recognize, width=8).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row2, text="⚙️AI设置", command=self._show_ai_settings, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="[循环]变量", command=self._editor_bind_variable, width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="[数据]数据源", command=self._editor_set_data_source, width=7).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="[AI]AI识别", command=self._editor_insert_ai_recognize, width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row2, text="AI设置", command=self._show_ai_settings, width=8).pack(side=tk.LEFT, padx=2)
         self.ai_fallback_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(btn_row2, text="AI兜底", variable=self.ai_fallback_var).pack(side=tk.LEFT, padx=4)
+        self.smart_replay_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(btn_row2, text="智能回放", variable=self.smart_replay_var).pack(side=tk.LEFT, padx=4)
+        self.visual_match_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(btn_row2, text="视觉匹配", variable=self.visual_match_var).pack(side=tk.LEFT, padx=4)
 
         tree_frame = ttk.Frame(self.editor_tab)
         tree_frame.pack(fill=tk.BOTH, expand=True)
@@ -475,7 +485,7 @@ class AutoRepeatApp:
         bottom_frame = ttk.Frame(self.editor_tab)
         bottom_frame.pack(fill=tk.X, pady=(4, 0))
 
-        self.chain_frame = ttk.LabelFrame(bottom_frame, text="📋 操作逻辑链")
+        self.chain_frame = ttk.LabelFrame(bottom_frame, text="[列表] 操作逻辑链")
         self.chain_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
         self.chain_text = tk.Text(self.chain_frame, height=6, wrap=tk.WORD, font=("", 10), state=tk.DISABLED, background="#f0f0f0", foreground="#1a1a1a", selectbackground="#4a90d9")
         self.chain_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
@@ -492,6 +502,7 @@ class AutoRepeatApp:
             self._start_record()
 
     def _start_record(self):
+        action_log.info("开始录制 speed=%.1f", self.speed_var.get())
         name = _ask_string(self.root, "识别", "输入脚本名称:")
         if not name:
             return
@@ -514,6 +525,7 @@ class AutoRepeatApp:
         self._update_record_count()
 
     def _stop_record(self):
+        action_log.info("停止录制 events=%d", len(self._current_events))
         if not self.recorder:
             return
         self.status_var.set("处理中...")
@@ -549,15 +561,17 @@ class AutoRepeatApp:
             "pid_names": pid_names,
         }
 
-        logic_chain = self._build_logic_chain(events, pid_names)
+        logic_chain = self._build_logic_chain(events, pid_names, skip_ocr=True)
         meta["logic_chain"] = logic_chain
 
-        intent = ""
+        intent = self._logic_chain_to_intent(logic_chain)
         try:
             import ai_recognizer
-            self.status_var.set("AI生成意图描述中...")
+            self.status_var.set("AI优化意图描述中...")
             self.root.update_idletasks()
-            intent = ai_recognizer.generate_intent_with_fallback(events, meta)
+            ai_intent = ai_recognizer.generate_intent_with_fallback(events, meta)
+            if ai_intent:
+                intent = ai_intent
         except Exception as e:
             logger.warning("AI意图生成失败: %s", e)
 
@@ -578,12 +592,15 @@ class AutoRepeatApp:
             import pytesseract
         except ImportError:
             return ""
+        if not hasattr(self, '_screenshot_cache') or self._screenshot_cache_events is not events:
+            self._screenshot_cache = [(i, e) for i, e in enumerate(events) if e.get("type") == "screenshot" and e.get("file")]
+            self._screenshot_cache_events = events
         click_e = events[click_idx]
         cx, cy = click_e.get("x", 0), click_e.get("y", 0)
         click_time = click_e.get("time", 0)
         best_ss = None
         best_dt = float("inf")
-        for i, e in enumerate(events):
+        for i, e in self._screenshot_cache:
             if e.get("type") != "screenshot":
                 continue
             dt = abs(e.get("time", 0) - click_time)
@@ -624,7 +641,8 @@ class AutoRepeatApp:
         except Exception:
             return ""
 
-    def _build_logic_chain(self, events, pid_names):
+    def _build_logic_chain(self, events, pid_names, skip_ocr=False):
+        sync_log.debug("构建逻辑链条")
         steps = []
         last_pid = None
         last_window = None
@@ -649,6 +667,22 @@ class AutoRepeatApp:
                 btn_cn = {"left": "左键", "right": "右键", "middle": "中键"}.get(btn, btn)
                 ocr = e.get("ocr_anchor", {})
                 ocr_text = ocr.get("text", "") if ocr else ""
+                tpl = e.get("template", "")
+                tpl_path = ""
+                if tpl and self._scripts_dir:
+                    for subdir in ["scripts/templates", "templates"]:
+                        tp = os.path.join(self._scripts_dir, subdir, tpl)
+                        if os.path.exists(tp):
+                            tpl_path = tp
+                            break
+                if tpl_path and not skip_ocr:
+                    try:
+                        from ocr_corrections import lookup_correction
+                        corrected = lookup_correction(tpl_path)
+                        if corrected:
+                            ocr_text = corrected
+                    except Exception:
+                        pass
                 ax = e.get("ax_element", {})
                 ax_title = ax.get("AXTitle", "") if ax else ""
                 ax_role = ax.get("AXRole", "") if ax else ""
@@ -656,11 +690,12 @@ class AutoRepeatApp:
                 tpl = e.get("template", "")
 
                 desc_parts = []
-                if ocr_text:
+                ocr_valid = ocr_text and len(ocr_text) >= 2 and not all(c in ".-0123456789()©' " for c in ocr_text)
+                if ocr_valid:
                     desc_parts.append(f"「{ocr_text}」")
-                if ax_title:
+                if ax_title and len(ax_title) >= 1:
                     desc_parts.append(f"「{ax_title}」")
-                elif ax_desc:
+                elif ax_desc and len(ax_desc) >= 1:
                     desc_parts.append(f"「{ax_desc}」")
 
                 role_cn = {"AXButton": "按钮", "AXStaticText": "文本", "AXTextField": "输入框",
@@ -669,15 +704,22 @@ class AutoRepeatApp:
                            "AXPopUpButton": "下拉框", "AXTable": "表格", "AXRow": "行",
                            }.get(ax_role, "")
 
-                if role_cn and not desc_parts:
-                    desc_parts.append(role_cn)
-
                 if not desc_parts:
-                    ss_ocr = self._ocr_click_region(events, idx)
-                    if ss_ocr:
-                        desc_parts.append(f"「{ss_ocr}」")
+                    if role_cn:
+                        desc_parts.append(role_cn)
+                    if not skip_ocr:
+                        ss_ocr = self._ocr_click_region(events, idx)
+                        if ss_ocr and len(ss_ocr) >= 2 and not all(c in ".-0123456789()©' " for c in ss_ocr):
+                            desc_parts.append(f"「{ss_ocr}」")
+                        elif not desc_parts:
+                            enhanced = self._enhanced_ocr_at(e.get("x", 0), e.get("y", 0), pid)
+                            if enhanced:
+                                desc_parts.append(f"「{enhanced}」")
 
-                desc = "".join(desc_parts) if desc_parts else f"({e.get('x', 0):.0f},{e.get('y', 0):.0f})"
+                if not desc_parts and role_cn:
+                    desc_parts = [role_cn]
+
+                desc = "".join(desc_parts) if desc_parts else f"区域({e.get('x', 0):.0f},{e.get('y', 0):.0f})"
                 step = {
                     "type": "click",
                     "button": btn_cn,
@@ -686,7 +728,14 @@ class AutoRepeatApp:
                     "pid": pid, "window": last_window,
                     "ocr": ocr_text, "ax_title": ax_title, "ax_role": ax_role,
                     "template": tpl,
+                    "event_idx": idx,
                 }
+                if tpl and self._scripts_dir:
+                    for subdir in ["scripts/templates", "templates"]:
+                        sp = os.path.join(self._scripts_dir, subdir, tpl)
+                        if os.path.exists(sp):
+                            step["screenshot_path"] = sp
+                            break
                 if e.get("modifiers"):
                     step["modifiers"] = e["modifiers"]
                 steps.append(step)
@@ -696,21 +745,128 @@ class AutoRepeatApp:
                 keycode = e.get("keycode", 0)
                 mods = e.get("modifiers", [])
                 if text and text.isprintable() and len(text) == 1:
-                    step = {"type": "input", "text": text, "pid": pid, "window": last_window}
+                    step = {"type": "input", "text": text, "pid": pid, "window": last_window, "event_idx": idx}
                 else:
                     key_name = {"cmd": "⌘", "shift": "⇧", "ctrl": "⌃", "alt": "⌥"}
                     mod_str = "".join(key_name.get(m, m) for m in mods)
                     kc_names = {36: "↵", 48: "⌫", 51: "⌦", 49: "空格", 53: "⎋"}
                     kn = kc_names.get(keycode, f"键{keycode}")
-                    step = {"type": "keypress", "key": f"{mod_str}{kn}", "pid": pid, "window": last_window}
+                    step = {"type": "keypress", "key": f"{mod_str}{kn}", "pid": pid, "window": last_window, "event_idx": idx}
                 steps.append(step)
 
             elif e["type"] == "scroll":
                 dy = e.get("dy", 0)
                 direction = "上滚" if dy > 0 else "下滚"
-                steps.append({"type": "scroll", "direction": direction, "amount": abs(dy), "pid": pid, "window": last_window})
+                steps.append({"type": "scroll", "direction": direction, "amount": abs(dy), "pid": pid, "window": last_window, "event_idx": idx})
 
         return steps
+
+    def _logic_chain_to_intent(self, chain):
+        sync_log.debug("链条转文本")
+        if not chain:
+            return ""
+        # Merge consecutive same actions
+        merged = []
+        for step in chain:
+            stype = step.get("type", "")
+            if stype == "switch_window":
+                merged.append(step)
+                continue
+            key = f"{stype}:{step.get('desc', '') or step.get('text', '') or step.get('key', '') or step.get('direction', '')}"
+            if merged and not merged[-1].get("type") == "switch_window":
+                prev_key = f"{merged[-1].get('type')}:{merged[-1].get('desc', '') or merged[-1].get('text', '') or merged[-1].get('key', '') or merged[-1].get('direction', '')}"
+                if key == prev_key:
+                    merged[-1]["_count"] = merged[-1].get("_count", 1) + 1
+                    continue
+            step = dict(step)
+            step["_count"] = 1
+            merged.append(step)
+
+        # Split by window into sections
+        sections = []
+        current_window = ""
+        current_steps = []
+        for step in merged:
+            if step.get("type") == "switch_window":
+                if current_steps:
+                    sections.append((current_window, current_steps))
+                current_window = step.get("target", "")
+                current_steps = []
+            else:
+                current_steps.append(step)
+        if current_steps:
+            sections.append((current_window, current_steps))
+
+        # Format as tree text
+        lines = []
+        for window, steps in sections:
+            if window:
+                lines.append(f"[{window}]")
+            for step in steps:
+                count = step.get("_count", 1)
+                stype = step.get("type", "")
+                if stype == "click":
+                    desc = step.get("desc", "")
+                    btn = step.get("button", "左键")
+                    action = f"右键{desc}" if btn == "右键" else f"点击{desc}"
+                    lines.append(f"  {action}" + (f" x{count}" if count > 1 else ""))
+                elif stype == "input":
+                    text = step.get("text", "")
+                    lines.append(f"  输入[{text}]" + (f" x{count}" if count > 1 else ""))
+                elif stype == "keypress":
+                    key = step.get("key", "")
+                    lines.append(f"  按{key}" + (f" x{count}" if count > 1 else ""))
+                elif stype == "scroll":
+                    direction = step.get("direction", "")
+                    lines.append(f"  {direction}滚动" + (f" x{count}" if count > 1 else ""))
+        return "\n".join(lines)
+
+
+    def _enhanced_ocr_at(self, x, y, pid=None):
+        sync_log.debug("增强OCR识别")
+        if not x or not y:
+            return ""
+        try:
+            import pytesseract
+            from PIL import Image
+            from Quartz import CGWindowListCreateImage, kCGNullWindowID, kCGWindowListOptionOnScreenOnly
+            import numpy as np
+            from Quartz import CGRectInfinite
+            cg_img = CGWindowListCreateImage(CGRectInfinite, kCGWindowListOptionOnScreenOnly, kCGNullWindowID, 0)
+            if not cg_img:
+                return ""
+            from Quartz import CGImageGetWidth, CGImageGetHeight, CGImageGetBytesPerRow, CGImageGetDataProvider
+            from Quartz import CGDataProviderCopyData
+            w = CGImageGetWidth(cg_img)
+            h = CGImageGetHeight(cg_img)
+            bpr = CGImageGetBytesPerRow(cg_img)
+            data = CGDataProviderCopyData(CGImageGetDataProvider(cg_img))
+            arr = np.frombuffer(data, dtype=np.uint8).reshape(h, bpr // 4, 4)
+            full_img = Image.fromarray(arr[:, :w, :3], "RGB")
+            region_size = 150
+            left = max(0, int(x) - region_size)
+            top = max(0, int(y) - region_size)
+            right = min(w, int(x) + region_size)
+            bottom = min(h, int(y) + region_size)
+            crop = full_img.crop((left, top, right, bottom))
+            results = pytesseract.image_to_data(crop, lang="chi_sim+eng", output_type=pytesseract.Output.DICT)
+            best = ""
+            best_dist = 999999
+            cx, cy = int(x) - left, int(y) - top
+            for i, t in enumerate(results["text"]):
+                if not t or len(t) < 2:
+                    continue
+                if all(c in ".-0123456789()©' " for c in t):
+                    continue
+                bx = results["left"][i] + results["width"][i] // 2
+                by = results["top"][i] + results["height"][i] // 2
+                dist = (bx - cx) ** 2 + (by - cy) ** 2
+                if dist < best_dist:
+                    best_dist = dist
+                    best = t
+            return best if best_dist < 10000 else ""
+        except Exception:
+            return ""
 
     def _update_record_count(self):
         if not self.recording:
@@ -732,6 +888,7 @@ class AutoRepeatApp:
             return
         item = self.tree.item(sel[0])
         name = item["values"][0]
+        action_log.info("开始回放 script=%s speed=%.1f smart=%s visual=%s", name, self.speed_var.get(), self.smart_replay_var.get(), self.visual_match_var.get())
         data = self.sm.load(name)
         if not data:
             messagebox.showerror("错误", f"脚本不存在: {name}")
@@ -752,7 +909,7 @@ class AutoRepeatApp:
                 return
 
         if has_variables and not data_source and not user_vars:
-            messagebox.showwarning("提示", "脚本包含变量标记，但未绑定数据源。\n请在编辑器中点击「📊数据源」按钮绑定数据文件。")
+            messagebox.showwarning("提示", "脚本包含变量标记，但未绑定数据源。\n请在编辑器中点击「[数据]数据源」按钮绑定数据文件。")
             return
 
         engine_type = skill_meta.get("engine", "auto")
@@ -768,8 +925,8 @@ class AutoRepeatApp:
             elif not browser_profile:
                 browser_profile = browser_engine.get_active_session_id()
 
-        self.player = Player(speed=speed, target_pid=target_pid, smart_replay=True,
-                             visual_match=True, scripts_dir=self._scripts_dir,
+        self.player = Player(speed=speed, target_pid=target_pid, smart_replay=self.smart_replay_var.get(),
+                             visual_match=self.visual_match_var.get(), scripts_dir=self._scripts_dir,
                              retry_count=3, on_error="continue",
                              use_ai_fallback=self.ai_fallback_var.get(),
                              browser_engine=browser_engine if engine_type in ("browser", "browser_dom", "auto") else None,
@@ -793,22 +950,23 @@ class AutoRepeatApp:
         threading.Thread(target=run, daemon=True).start()
 
     def _toggle_pause(self):
+        action_log.info("暂停/继续回放")
         if not self.player:
             return
-        if self.btn_pause.cget("text") == "⏸ 暂停":
+        if self.btn_pause.cget("text") == "|| 暂停":
             self.player.pause()
-            self.btn_pause.configure(text="▶ 继续")
+            self.btn_pause.configure(text="> 继续")
             self.status_var.set("复现已暂停")
         else:
             self.player.resume()
-            self.btn_pause.configure(text="⏸ 暂停")
+            self.btn_pause.configure(text="|| 暂停")
             self.status_var.set("复现中...")
 
     def _on_play_done(self, name):
         self.playing = False
         self.btn_play.configure(state=tk.NORMAL)
         self.btn_record.configure(state=tk.NORMAL)
-        self.btn_pause.configure(state=tk.DISABLED, text="⏸ 暂停")
+        self.btn_pause.configure(state=tk.DISABLED, text="|| 暂停")
         self.btn_stop_play.configure(state=tk.DISABLED)
         log = self.player.execution_log if self.player else []
         fail_count = sum(1 for l in log if l.get("status") == "fail")
@@ -826,17 +984,19 @@ class AutoRepeatApp:
             logger.info("执行报告: %s", report_path)
 
     def _stop_play(self):
+        action_log.info("停止回放")
         if self.player:
             self.player.stop()
         self.playing = False
         self.btn_play.configure(state=tk.NORMAL)
         self.btn_record.configure(state=tk.NORMAL)
-        self.btn_pause.configure(state=tk.DISABLED, text="⏸ 暂停")
+        self.btn_pause.configure(state=tk.DISABLED, text="|| 暂停")
         self.btn_stop_play.configure(state=tk.DISABLED)
         self.status_var.set("复现已停止")
         self.root.deiconify()
 
     def _refresh_scripts(self):
+        sync_log.debug("刷新脚本列表")
         for item in self.tree.get_children():
             self.tree.delete(item)
         for s in self.sm.list_all():
@@ -861,6 +1021,7 @@ class AutoRepeatApp:
         item = self.tree.item(sel[0])
         old_name = item["values"][0]
         new_name = _ask_string(self.root, "重命名", "新名称:", initialvalue=old_name)
+        action_log.info("重命名脚本 old=%s new=%s", old_name, new_name)
         if new_name and new_name != old_name:
             data = self.sm.load(old_name)
             if data:
@@ -881,6 +1042,7 @@ class AutoRepeatApp:
             return
         item = self.tree.item(sel[0])
         name = item["values"][0]
+        action_log.info("删除脚本 name=%s", name)
         if messagebox.askyesno("确认", f"删除脚本: {name}?"):
             self.sm.delete(name)
             self._refresh_scripts()
@@ -892,12 +1054,14 @@ class AutoRepeatApp:
             return
         item = self.tree.item(sel[0])
         name = item["values"][0]
+        action_log.info("打开编辑器 name=%s", name)
         self._open_editor_for_script(name)
 
     def _new_script(self):
         name = _ask_string(self.root, "新建脚本", "脚本名称:")
         if not name:
             return
+        action_log.info("新建脚本 name=%s", name)
         name = name.strip().replace(" ", "_")
         existing = self.sm.load(name)
         if existing:
@@ -911,14 +1075,19 @@ class AutoRepeatApp:
         self._open_editor_for_script(name)
 
     def _open_editor_for_script(self, name):
+        import time as _time
+        t0 = _time.time()
         data = self.sm.load(name)
         if not data:
             messagebox.showerror("错误", f"脚本不存在: {name}")
             return
+        t1 = _time.time()
+        logger.info("[PERF] sm.load: %.0fms", (t1 - t0) * 1000)
         self._current_script_name = name
         self._current_events = data.get("events", [])
         self.editor_title_var.set(f"编辑: {name} ({len(self._current_events)} 步)")
-        self.intent_var.set(data.get("intent", ""))
+        self.intent_text.delete("1.0", tk.END)
+        self.intent_text.insert("1.0", data.get("intent", ""))
         sm = data.get("skill_meta", {})
         self.triggers_var.set(",".join(sm.get("triggers", [])))
         self.category_var.set(sm.get("category", ""))
@@ -929,6 +1098,8 @@ class AutoRepeatApp:
         self.engine_var.set(sm.get("engine", "auto"))
         self.browser_profile_var.set(sm.get("browser_profile", "") or "")
         self.hotkey_var.set(sm.get("hotkey", "") or "")
+        t2 = _time.time()
+        logger.info("[PERF] UI字段填充: %.0fms", (t2 - t1) * 1000)
 
         pid_names = data.get("meta", {}).get("pid_names", {})
         if not pid_names:
@@ -939,11 +1110,6 @@ class AutoRepeatApp:
                     owner = win.get("owner", "")
                     if owner:
                         pid_names[pid] = owner
-            if get_visible_windows:
-                for w in get_visible_windows():
-                    for e in self._current_events:
-                        if e.get("pid") == w["pid"] and w["pid"] not in pid_names:
-                            pid_names[w["pid"]] = w.get("owner", "")
 
         pids = set(e.get("pid") for e in self._current_events if e.get("pid"))
         labels = ["全部"]
@@ -955,17 +1121,27 @@ class AutoRepeatApp:
             self._pid_name_map[label] = pid
         self.filter_window_combo["values"] = labels
         self.filter_window_var.set("全部")
+        t3 = _time.time()
+        logger.info("[PERF] pid_names构建: %.0fms", (t3 - t2) * 1000)
 
         self._populate_editor()
+        t4 = _time.time()
+        logger.info("[PERF] _populate_editor: %.0fms", (t4 - t3) * 1000)
+
         self._show_logic_chain(data)
+        t5 = _time.time()
+        logger.info("[PERF] _show_logic_chain: %.0fms", (t5 - t4) * 1000)
 
         nb = self.root.winfo_children()
         for child in nb:
             if isinstance(child, ttk.Notebook):
                 child.select(1)
                 break
+        t6 = _time.time()
+        logger.info("[PERF] 编辑器总耗时: %.0fms (events=%d)", (t6 - t0) * 1000, len(self._current_events))
 
     def _apply_window_filter(self, event=None):
+        sync_log.debug("应用窗口过滤")
         selected = self.filter_window_var.get()
         if selected == "全部":
             data = self.sm.load(self._current_script_name)
@@ -978,6 +1154,7 @@ class AutoRepeatApp:
         self._populate_editor()
 
     def _merge_clicks(self):
+        sync_log.debug("合并点击")
         merged = []
         skip_next_up = False
         for i, e in enumerate(self._current_events):
@@ -995,13 +1172,18 @@ class AutoRepeatApp:
         self._populate_editor()
 
     def _remove_screenshots(self):
+        sync_log.debug("移除截图")
         self._current_events = [e for e in self._current_events if e.get("type") != "screenshot"]
         self._populate_editor()
 
     def _show_logic_chain(self, data):
+        import time as _time
+        t0 = _time.time()
         events = data.get("events", [])
         pid_names = data.get("meta", {}).get("pid_names", {})
-        chain = self._build_logic_chain(events, pid_names)
+        chain = self._build_logic_chain(events, pid_names, skip_ocr=True)
+        t1 = _time.time()
+        logger.info("[PERF] _build_logic_chain: %.0fms (chain=%d)", (t1 - t0) * 1000, len(chain))
         if not chain:
             self.chain_text.configure(state=tk.NORMAL)
             self.chain_text.delete("1.0", tk.END)
@@ -1026,11 +1208,11 @@ class AutoRepeatApp:
             if win and win != current_window:
                 if current_window is not None:
                     self.chain_text.insert(tk.END, "\n")
-                self.chain_text.insert(tk.END, f"🪟 {win}\n", "window_header")
+                self.chain_text.insert(tk.END, f"[窗口] {win}\n", "window_header")
                 current_window = win
 
             if s["type"] == "switch_window":
-                self.chain_text.insert(tk.END, f"  🔄 切换到: {s['target']}\n", "switch")
+                self.chain_text.insert(tk.END, f"  [滚动] 切换到: {s['target']}\n", "switch")
             elif s["type"] == "click":
                 step_num += 1
                 mod = ""
@@ -1043,19 +1225,6 @@ class AutoRepeatApp:
                 if has_text:
                     self.chain_text.insert(tk.END, f"{desc}\n", "step")
                 else:
-                    tpl = s.get("template", "")
-                    tpl_path = os.path.join(self._scripts_dir, "templates", tpl) if tpl else ""
-                    if tpl and os.path.exists(tpl_path):
-                        try:
-                            from PIL import Image, ImageTk
-                            img = Image.open(tpl_path)
-                            img.thumbnail((32, 32), Image.LANCZOS)
-                            photo = ImageTk.PhotoImage(img)
-                            self._chain_photos.append(photo)
-                            self.chain_text.image_create(tk.END, image=photo)
-                            self.chain_text.insert(tk.END, f"  ", "step")
-                        except Exception:
-                            pass
                     self.chain_text.insert(tk.END, f"{desc}\n", "coord")
             elif s["type"] == "input":
                 step_num += 1
@@ -1074,9 +1243,10 @@ class AutoRepeatApp:
             self.editor_tree.delete(item)
 
         pid_names = {}
-        data = self.sm.load(self._current_script_name)
-        if data:
-            pid_names = data.get("meta", {}).get("pid_names", {})
+        if self._current_script_name:
+            data = self.sm.load(self._current_script_name)
+            if data:
+                pid_names = data.get("meta", {}).get("pid_names", {})
 
         window_groups = {}
         step_num = 0
@@ -1086,15 +1256,15 @@ class AutoRepeatApp:
                 continue
 
             step_num += 1
-            detail = _human_event_detail(e, self._scripts_dir)
+            detail = e.get("intent") or _human_event_detail(e, self._scripts_dir)
 
             icon_map = {
-                "mouse_down": "👆", "mouse_drag": "✋", "scroll": "🔄",
-                "key_down": "⌨️", "type_text": "⌨️", "screenshot": "📸",
-                "wait_for": "⏳", "assert_that": "✅", "activate": "🪟",
-                "if": "🔀", "endif": "🔚", "for": "🔁", "endfor": "🔚",
-                "while": "🔁", "endwhile": "🔚", "set_variable": "📝",
-                "call_script": "📞", "comment": "💬", "ai_recognize": "🤖", "wait_manual": "⏸",
+                "mouse_down": "[点击]", "mouse_drag": "[拖动]", "scroll": "[滚动]",
+                "key_down": "[按键]", "type_text": "[按键]", "screenshot": "[截图]",
+                "wait_for": "[等待]", "assert_that": "[OK]", "activate": "[窗口]",
+                "if": "[分支]", "endif": "[结束]", "for": "[循环]", "endfor": "[结束]",
+                "while": "[循环]", "endwhile": "[结束]", "set_variable": "[变量]",
+                "call_script": "[调用]", "comment": "[注释]", "ai_recognize": "[AI]", "wait_manual": "||",
             }
             icon = icon_map.get(etype, "•")
 
@@ -1103,19 +1273,20 @@ class AutoRepeatApp:
             if pid:
                 window_str = pid_names.get(pid, f"PID:{pid}")
 
-            disabled = "🚫" if e.get("disabled") else ""
+            disabled = "[X]" if e.get("disabled") else ""
 
             if window_str not in window_groups:
                 window_groups[window_str] = []
             window_groups[window_str].append((step_num, icon, detail, window_str, disabled, i))
 
         for win_name, items in window_groups.items():
-            group_label = f"🪟 {win_name}" if win_name else "🪟 未知窗口"
+            group_label = f"[窗口] {win_name}" if win_name else "[窗口] 未知窗口"
             group_id = self.editor_tree.insert("", tk.END, values=("", "", group_label, "", ""), open=True)
             for step_num, icon, detail, window_str, disabled, idx in items:
                 self.editor_tree.insert(group_id, tk.END, iid=f"evt_{idx}", values=(step_num, icon, detail, window_str, disabled))
 
     def _on_editor_select(self, event=None):
+        sync_log.debug("编辑器选择步骤")
         sel = self.editor_tree.selection()
         if not sel:
             return
@@ -1148,7 +1319,7 @@ class AutoRepeatApp:
             if tpl:
                 tpl_path = os.path.join(self._scripts_dir, "templates", tpl)
                 if os.path.exists(tpl_path):
-                    parts.append(f"📸 模板截图: {tpl}")
+                    parts.append(f"[截图] 模板截图: {tpl}")
             wb = e.get("window_bounds")
             if wb:
                 parts.append(f"窗口: {wb.get('owner', '')} ({wb.get('x', 0)},{wb.get('y', 0)}) {wb.get('w', 0)}x{wb.get('h', 0)}")
@@ -1167,6 +1338,7 @@ class AutoRepeatApp:
         self.preview_label.configure(text="\n".join(parts) if parts else "无详细信息")
 
     def _on_editor_double_click(self, event=None):
+        sync_log.debug("编辑器双击步骤")
         sel = self.editor_tree.selection()
         if not sel:
             return
@@ -1209,6 +1381,7 @@ class AutoRepeatApp:
             messagebox.showinfo("预览", f"无法显示截图: {ex}")
 
     def _editor_toggle_disable(self):
+        action_log.info("切换步骤启用/禁用")
         sel = self.editor_tree.selection()
         if not sel:
             return
@@ -1221,6 +1394,7 @@ class AutoRepeatApp:
         self._populate_editor()
 
     def _editor_delete_step(self):
+        action_log.info("删除步骤")
         sel = self.editor_tree.selection()
         if not sel:
             return
@@ -1252,6 +1426,7 @@ class AutoRepeatApp:
         return int(sel[0][4:]) + 1
 
     def _editor_insert_wait(self):
+        action_log.info("插入等待")
         idx = self._get_selected_event_idx()
         timeout = _ask_integer(self.root, "等待", "等待秒数:", initialvalue=3) or 3
         ev = {"type": "wait_for", "strategy": "template", "timeout": timeout, "time": 0}
@@ -1259,6 +1434,7 @@ class AutoRepeatApp:
         self._populate_editor()
 
     def _editor_insert_assert(self):
+        action_log.info("插入断言")
         idx = self._get_selected_event_idx()
         desc = _ask_string(self.root, "断言", "断言描述:") or ""
         ev = {"type": "assert_that", "strategy": "template", "description": desc, "timeout": 5, "on_fail": "warn", "time": 0}
@@ -1266,6 +1442,7 @@ class AutoRepeatApp:
         self._populate_editor()
 
     def _editor_insert_for(self):
+        action_log.info("插入循环")
         idx = self._get_selected_event_idx()
         n = _ask_integer(self.root, "循环", "循环次数:", initialvalue=3) or 3
         ev_for = {"type": "for", "count": n, "variable": "_i", "time": 0}
@@ -1275,6 +1452,7 @@ class AutoRepeatApp:
         self._populate_editor()
 
     def _editor_insert_comment(self):
+        action_log.info("插入注释")
         idx = self._get_selected_event_idx()
         text = _ask_string(self.root, "注释", "注释内容:") or ""
         ev = {"type": "comment", "text": text, "time": 0}
@@ -1282,13 +1460,14 @@ class AutoRepeatApp:
         self._populate_editor()
 
     def _editor_insert_ai_recognize(self):
+        action_log.info("插入AI识别")
         if not self._current_script_name:
             self._new_script()
             if not self._current_script_name:
                 return
 
         top = tk.Toplevel(self.root)
-        top.title("🤖 添加AI识别步骤")
+        top.title("[AI] 添加AI识别步骤")
         top.geometry("450x350")
         top.transient(self.root)
         top.grab_set()
@@ -1380,7 +1559,7 @@ class AutoRepeatApp:
         config = ai.load_config()
 
         top = tk.Toplevel(self.root)
-        top.title("⚙️ AI模型设置")
+        top.title(" AI模型设置")
         top.geometry("600x650")
         top.transient(self.root)
         top.grab_set()
@@ -1421,6 +1600,13 @@ class AutoRepeatApp:
                 e.configure(show="" if sv.get() else "*")
             ttk.Checkbutton(kf, text="显示", variable=show_var, command=_toggle).pack(side=tk.LEFT, padx=4)
 
+            signup_url = pinfo.get("signup_url", "")
+            if signup_url:
+                def _open_signup(url=signup_url):
+                    import webbrowser
+                    webbrowser.open(url)
+                ttk.Button(kf, text="申请Key", command=_open_signup, width=7).pack(side=tk.LEFT, padx=4)
+
             enabled_var = tk.BooleanVar(value=providers.get(provider_key, {}).get("enabled", True))
             ttk.Checkbutton(pf, text="启用", variable=enabled_var).pack(side=tk.LEFT)
             key_entries[f"{provider_key}_enabled"] = enabled_var
@@ -1434,14 +1620,14 @@ class AutoRepeatApp:
 
         vmf = ttk.Frame(model_frame)
         vmf.pack(fill=tk.X, pady=2)
-        ttk.Label(vmf, text="🤖 图形识别模型:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Label(vmf, text="[AI] 图形识别模型:").pack(side=tk.LEFT, padx=(0, 4))
         vision_models = [k for k, v in ai.MODEL_REGISTRY.items() if "vision" in v["capabilities"]]
         vision_var = tk.StringVar(value=config.get("vision_model", "glm-4v-flash"))
         ttk.Combobox(vmf, textvariable=vision_var, values=vision_models, width=22, state="readonly").pack(side=tk.LEFT)
 
         tmf = ttk.Frame(model_frame)
         tmf.pack(fill=tk.X, pady=2)
-        ttk.Label(tmf, text="📝 文本推理模型:").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Label(tmf, text="[变量] 文本推理模型:").pack(side=tk.LEFT, padx=(0, 4))
         text_models = [k for k, v in ai.MODEL_REGISTRY.items() if "text" in v["capabilities"]]
         text_var = tk.StringVar(value=config.get("text_model", "deepseek-chat"))
         ttk.Combobox(tmf, textvariable=text_var, values=text_models, width=22, state="readonly").pack(side=tk.LEFT)
@@ -1453,12 +1639,12 @@ class AutoRepeatApp:
             model_key = vision_var.get()
             model_info = ai.MODEL_REGISTRY.get(model_key)
             if not model_info:
-                status_var.set("❌ 未知模型")
+                status_var.set("[X] 未知模型")
                 return
             provider = model_info["provider"]
             api_key = key_entries.get(provider, tk.StringVar()).get()
             ok, msg = ai.test_connection(model_key, api_key)
-            status_var.set(f"{'✅' if ok else '❌'} {msg}")
+            status_var.set(f"{'[OK]' if ok else '[X]'} {msg}")
 
         def _save():
             for provider_key in all_providers:
@@ -1469,7 +1655,7 @@ class AutoRepeatApp:
             config["vision_model"] = vision_var.get()
             config["text_model"] = text_var.get()
             ai.save_config(config)
-            status_var.set("✅ 设置已保存")
+            status_var.set("[OK] 设置已保存")
             self.status_var.set("AI设置已保存")
 
         btn_frm = ttk.Frame(frm)
@@ -1479,11 +1665,12 @@ class AutoRepeatApp:
         ttk.Button(btn_frm, text="关闭", command=top.destroy, width=8).pack(side=tk.RIGHT)
 
     def _editor_pick_element(self):
+        action_log.info("选取元素")
         if not self._current_script_name:
             self._new_script()
             if not self._current_script_name:
                 return
-        self.status_var.set("🎯 点选模式：点击屏幕上的目标元素，按 Esc 取消...")
+        self.status_var.set("[*] 点选模式：点击屏幕上的目标元素，按 Esc 取消...")
         self.root.iconify()
         self.root.update_idletasks()
         import time as _time
@@ -1628,7 +1815,7 @@ class AutoRepeatApp:
     def _show_pick_dialog(self, x, y, pid, window_owner, window_title, window_bounds,
                           ax_element, ax_actions, ocr_anchor, template_file):
         top = tk.Toplevel(self.root)
-        top.title("🎯 添加步骤")
+        top.title("[*] 添加步骤")
         top.geometry("500x450")
         top.transient(self.root)
         top.grab_set()
@@ -1636,24 +1823,24 @@ class AutoRepeatApp:
         frm = ttk.Frame(top, padding=12)
         frm.pack(fill=tk.BOTH, expand=True)
 
-        info_parts = [f"📍 坐标: ({x:.0f}, {y:.0f})"]
+        info_parts = [f"[坐标] 坐标: ({x:.0f}, {y:.0f})"]
         if window_owner:
-            info_parts.append(f"🪟 窗口: {window_owner}")
+            info_parts.append(f"[窗口] 窗口: {window_owner}")
         if ax_element:
             role = ax_element.get("AXRoleDescription", ax_element.get("AXRole", ""))
             title = ax_element.get("AXTitle", "")
             desc = ax_element.get("AXDescription", "")
             val = ax_element.get("AXValue", "")
             if role:
-                info_parts.append(f"🔧 元素: {role}")
+                info_parts.append(f"[工具] 元素: {role}")
             if title:
-                info_parts.append(f"📌 标题: {title}")
+                info_parts.append(f"[标记] 标题: {title}")
             elif desc:
-                info_parts.append(f"📌 描述: {desc}")
+                info_parts.append(f"[标记] 描述: {desc}")
             if val:
-                info_parts.append(f"📝 值: {val[:50]}")
+                info_parts.append(f"[变量] 值: {val[:50]}")
         if ocr_anchor:
-            info_parts.append(f"🔍 OCR: 「{ocr_anchor['text']}」")
+            info_parts.append(f"[搜索] OCR: 「{ocr_anchor['text']}」")
 
         ttk.Label(frm, text="\n".join(info_parts), font=("", 10), wraplength=460, justify=tk.LEFT).pack(anchor="w", pady=(0, 8))
 
@@ -1664,11 +1851,11 @@ class AutoRepeatApp:
         actions_frame = ttk.Frame(frm)
         actions_frame.pack(fill=tk.X, pady=(0, 8))
 
-        ttk.Radiobutton(actions_frame, text="👆 点击", variable=action_var, value="click").pack(anchor="w", pady=2)
-        ttk.Radiobutton(actions_frame, text="⌨️ 输入文字", variable=action_var, value="type").pack(anchor="w", pady=2)
-        ttk.Radiobutton(actions_frame, text="⌨️ 输入变量 {{变量名}}", variable=action_var, value="type_var").pack(anchor="w", pady=2)
+        ttk.Radiobutton(actions_frame, text="[点击] 点击", variable=action_var, value="click").pack(anchor="w", pady=2)
+        ttk.Radiobutton(actions_frame, text="[按键] 输入文字", variable=action_var, value="type").pack(anchor="w", pady=2)
+        ttk.Radiobutton(actions_frame, text="[按键] 输入变量 {{变量名}}", variable=action_var, value="type_var").pack(anchor="w", pady=2)
         if ax_actions and "AXPress" in ax_actions:
-            ttk.Radiobutton(actions_frame, text="🔘 Accessibility点击 (AXPress)", variable=action_var, value="ax_press").pack(anchor="w", pady=2)
+            ttk.Radiobutton(actions_frame, text="[选项] Accessibility点击 (AXPress)", variable=action_var, value="ax_press").pack(anchor="w", pady=2)
 
         input_frame = ttk.Frame(frm)
         input_frame.pack(fill=tk.X, pady=(0, 8))
@@ -1748,6 +1935,7 @@ class AutoRepeatApp:
         top.bind("<Escape>", lambda e: top.destroy())
 
     def _editor_bind_variable(self):
+        action_log.info("绑定变量")
         sel = self.editor_tree.selection()
         if not sel:
             messagebox.showwarning("提示", "请先选择一个步骤")
@@ -1835,7 +2023,7 @@ class AutoRepeatApp:
         frm = ttk.Frame(top, padding=10)
         frm.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(frm, text=f"📊 数据源: {os.path.basename(path)}", font=("", 11, "bold")).pack(anchor="w", pady=(0, 4))
+        ttk.Label(frm, text=f"[数据] 数据源: {os.path.basename(path)}", font=("", 11, "bold")).pack(anchor="w", pady=(0, 4))
         ttk.Label(frm, text=f"{len(rows)} 行 × {len(columns)} 列").pack(anchor="w", pady=(0, 8))
 
         cols_display = ("col_name",)
@@ -1890,7 +2078,7 @@ class AutoRepeatApp:
         if data:
             data["events"] = self._current_events
             data["event_count"] = len(self._current_events)
-            data["intent"] = self.intent_var.get()
+            data["intent"] = self.intent_text.get("1.0", tk.END).strip()
             triggers = [t.strip() for t in self.triggers_var.get().split(",") if t.strip()]
             tags = [t.strip() for t in self.tags_var.get().split(",") if t.strip()]
             params_raw = self.params_var.get().strip()
@@ -1918,6 +2106,378 @@ class AutoRepeatApp:
             self._refresh_scripts()
 
     def _regenerate_intent(self):
+        if not self._current_events:
+            return
+        pid_names = {}
+        data = self.sm.load(self._current_script_name) if self._current_script_name else None
+        if data:
+            pid_names = data.get("meta", {}).get("pid_names", {})
+        chain = self._build_logic_chain(self._current_events, pid_names, skip_ocr=True)
+        intent = self._logic_chain_to_intent(chain)
+        self.intent_text.delete("1.0", tk.END)
+        self.intent_text.insert("1.0", intent)
+        self.status_var.set("逻辑链条已从步骤生成")
+
+
+
+    def _split_by_window(self):
+        try:
+            action_log.info("按窗口拆分 script=%s events=%d", self._current_script_name, len(self._current_events))
+            if not self._current_events and self._current_script_name:
+                data = self.sm.load(self._current_script_name)
+                if data:
+                    self._current_events = data.get("events", [])
+            if not self._current_events:
+                messagebox.showinfo("提示", "没有可拆分的步骤")
+                return
+            pid_names = {}
+            data = self.sm.load(self._current_script_name) if self._current_script_name else None
+            if data:
+                pid_names = data.get("meta", {}).get("pid_names", {})
+            chain = self._build_logic_chain(self._current_events, pid_names, skip_ocr=True)
+            blacklist = self._load_window_blacklist()
+            raw_sections = []
+            current_window = ""
+            current_steps = []
+            for step in chain:
+                if step.get("type") == "switch_window":
+                    if current_steps:
+                        raw_sections.append((current_window, current_steps))
+                    current_window = step.get("target", "")
+                    current_steps = []
+                else:
+                    current_steps.append(step)
+            if current_steps:
+                raw_sections.append((current_window, current_steps))
+            window_ranges = {}
+            window_order = []
+            for window, steps in raw_sections:
+                win_short = window.split(" - ")[0].strip() if window else "未命名"
+                if any(b in win_short for b in blacklist):
+                    continue
+                idx_list = [s["event_idx"] for s in steps if "event_idx" in s and 0 <= s["event_idx"] < len(self._current_events)]
+                if not idx_list:
+                    continue
+                if win_short not in window_ranges:
+                    window_ranges[win_short] = []
+                    window_order.append(win_short)
+                window_ranges[win_short].append((min(idx_list), max(idx_list) + 1))
+            if len(window_ranges) <= 1:
+                messagebox.showinfo("提示", "只有一个窗口，无需拆分")
+                return
+            window_names = ", ".join(window_order)
+            base_name = self._current_script_name or "script"
+            saved = 0
+            sub_results = []
+            for win_short in window_order:
+                sub_name = f"{base_name}_{win_short}"
+                sub_events = []
+                for start, end in window_ranges[win_short]:
+                    sub_events.extend(self._current_events[start:end])
+                if sub_events:
+                    sub_chain = self._build_logic_chain(sub_events, pid_names, skip_ocr=True)
+                    sub_intent = self._logic_chain_to_intent(sub_chain)
+                    self.sm.save(sub_name, sub_events, {"pid_names": pid_names}, intent=sub_intent)
+                    saved += 1
+                    sub_results.append((sub_name, len(sub_events), sub_chain))
+            self._refresh_scripts()
+            self.status_var.set(f"已拆分为 {saved} 个子脚本: {window_names}")
+            for sub_name, evt_count, sub_chain in sub_results:
+                top = tk.Toplevel(self.root)
+                top.title(f"拆分校准: {sub_name}")
+                top.geometry("900x550")
+                top.transient(self.root)
+                ttk.Label(top, text=f"{sub_name} ({evt_count} 步) - 点击步骤查看截图，双击修正文本", font=("", 10, "bold")).pack(padx=8, pady=(8, 2), anchor=tk.W)
+                pane = ttk.PanedWindow(top, orient=tk.HORIZONTAL)
+                pane.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+                left = ttk.Frame(pane)
+                pane.add(left, weight=3)
+                right = ttk.LabelFrame(pane, text="截图预览")
+                pane.add(right, weight=1)
+                pv_label = ttk.Label(right, text="点击步骤查看截图", wraplength=250)
+                pv_label.pack(padx=4, pady=4)
+                pv_img = ttk.Label(right)
+                pv_img.pack(padx=4, pady=4)
+                cols = ("step", "ocr", "screenshot")
+                tree = ttk.Treeview(left, columns=cols, show="headings", height=18)
+                tree.heading("step", text="步骤")
+                tree.heading("ocr", text="识别文本")
+                tree.heading("screenshot", text="截图")
+                tree.column("step", width=250)
+                tree.column("ocr", width=180)
+                tree.column("screenshot", width=50)
+                sb = ttk.Scrollbar(left, orient=tk.VERTICAL, command=tree.yview)
+                tree.configure(yscrollcommand=sb.set)
+                sb.pack(side=tk.RIGHT, fill=tk.Y)
+                tree.pack(fill=tk.BOTH, expand=True)
+                sd_list = []
+                for step in sub_chain:
+                    st = step.get("type", "")
+                    if st == "switch_window":
+                        desc = f"[切换] {step.get('target', '')}"
+                        ocr = ""
+                    elif st == "click":
+                        desc = f"点击{step.get('desc', '')}"
+                        ocr = step.get("ocr", "") or step.get("desc", "")
+                    elif st == "input":
+                        desc = f"输入[{step.get('text', '')}]"
+                        ocr = step.get("text", "")
+                    elif st == "keypress":
+                        desc = f"按{step.get('key', '')}"
+                        ocr = step.get("key", "")
+                    elif st == "scroll":
+                        desc = f"{step.get('direction', '')}滚动"
+                        ocr = ""
+                    else:
+                        continue
+                    ss = step.get("screenshot_path", "")
+                    has_ss = "有" if ss else ""
+                    iid = tree.insert("", tk.END, values=(desc, ocr, has_ss))
+                    sd_list.append({"iid": iid, "ocr": ocr, "screenshot_path": ss})
+                def _sel(e=None, sd_list=sd_list, pv_label=pv_label, pv_img=pv_img, tree=tree):
+                    sel = tree.selection()
+                    if not sel:
+                        return
+                    for sd in sd_list:
+                        if sd["iid"] == sel[0]:
+                            ss = sd.get("screenshot_path", "")
+                            if ss and os.path.exists(ss):
+                                try:
+                                    from PIL import Image, ImageTk
+                                    img = Image.open(ss)
+                                    img.thumbnail((250, 250))
+                                    photo = ImageTk.PhotoImage(img)
+                                    pv_img.configure(image=photo)
+                                    pv_img.image = photo
+                                    pv_label.configure(text=sd.get("ocr", ""))
+                                except Exception:
+                                    pv_label.configure(text="截图加载失败")
+                            else:
+                                pv_img.configure(image="")
+                                pv_label.configure(text="无截图")
+                            break
+                tree.bind("<<TreeviewSelect>>", _sel)
+                btn_frame = ttk.Frame(top)
+                btn_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
+                ttk.Button(btn_frame, text="关闭", command=top.destroy).pack(side=tk.RIGHT)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("拆分错误", str(e))
+
+    def _load_window_blacklist(self):
+        bl_path = os.path.join(self._scripts_dir, "window_blacklist.txt")
+        if os.path.exists(bl_path):
+            with open(bl_path, "r", encoding="utf-8") as f:
+                return [line.strip() for line in f if line.strip()]
+        return []
+
+    def _edit_window_blacklist(self):
+        bl_path = os.path.join(self._scripts_dir, "window_blacklist.txt")
+        current = self._load_window_blacklist()
+        top = tk.Toplevel(self.root)
+        top.title("窗口黑名单 - 拆分时排除的窗口")
+        top.geometry("400x220")
+        top.resizable(False, False)
+        top.transient(self.root)
+        ttk.Label(top, text="每行一个窗口名(部分匹配)，拆分时自动排除:", font=("", 10)).pack(padx=8, pady=(8, 2), anchor=tk.W)
+        txt = tk.Text(top, wrap=tk.WORD, font=("", 11), height=5)
+        txt.pack(fill=tk.X, padx=8, pady=4)
+        txt.insert("1.0", "\n".join(current))
+        btn = ttk.Frame(top)
+        btn.pack(fill=tk.X, padx=8, pady=(0, 8))
+        ttk.Button(btn, text="保存并关闭", command=lambda: (self._save_blacklist(bl_path, txt), top.destroy())).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(btn, text="取消", command=top.destroy).pack(side=tk.RIGHT, padx=4)
+
+    def _save_blacklist(self, bl_path, txt_widget):
+        lines = txt_widget.get("1.0", tk.END).strip().split("\n")
+        with open(bl_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(l.strip() for l in lines if l.strip()))
+        self.status_var.set(f"黑名单已保存: {bl_path}")
+
+    def _save_intent_text(self):
+        action_log.info("保存逻辑链条")
+        text = self.intent_text.get("1.0", tk.END).strip()
+        if not text or not self._current_script_name:
+            return
+        path = os.path.join(self._scripts_dir, "scripts", f"{self._current_script_name}_logic.txt")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        self.status_var.set(f"逻辑链条已保存: {path}")
+
+    def _popup_intent_editor(self):
+
+        try:
+            sync_log.debug("弹出OCR校验编辑器")
+            if not self._current_events and self._current_script_name:
+                data = self.sm.load(self._current_script_name)
+                if data:
+                    self._current_events = data.get("events", [])
+            if not self._current_events:
+                messagebox.showinfo("提示", "没有可编辑的步骤")
+                return
+            pid_names = {}
+            data = self.sm.load(self._current_script_name) if self._current_script_name else None
+            if data:
+                pid_names = data.get("meta", {}).get("pid_names", {})
+            chain = self._build_logic_chain(self._current_events, pid_names, skip_ocr=True)
+
+            top = tk.Toplevel(self.root)
+            top.title("OCR校验编辑器 - 截图+识别对照")
+            top.geometry("1000x700")
+            top.transient(self.root)
+
+            toolbar = ttk.Frame(top)
+            toolbar.pack(fill=tk.X, padx=4, pady=4)
+            ttk.Label(toolbar, text="修正OCR识别错误，保存后自动学习到修正库", foreground="#2563eb", font=("", 10, "bold")).pack(side=tk.LEFT, padx=4)
+
+            main_pane = ttk.PanedWindow(top, orient=tk.HORIZONTAL)
+            main_pane.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+
+            left_frame = ttk.Frame(main_pane)
+            main_pane.add(left_frame, weight=3)
+
+            right_frame = ttk.LabelFrame(main_pane, text="截图预览")
+            main_pane.add(right_frame, weight=1)
+
+            preview_label = ttk.Label(right_frame, text="点击左侧步骤查看截图", wraplength=250)
+            preview_label.pack(padx=4, pady=4)
+            preview_img_label = ttk.Label(right_frame)
+            preview_img_label.pack(padx=4, pady=4)
+
+            cols = ("step", "original", "corrected", "screenshot")
+            tree = ttk.Treeview(left_frame, columns=cols, show="headings", height=20)
+            tree.heading("step", text="步骤")
+            tree.heading("original", text="原始识别")
+            tree.heading("corrected", text="修正文本")
+            tree.heading("screenshot", text="截图")
+            tree.column("step", width=200)
+            tree.column("original", width=150)
+            tree.column("corrected", width=150)
+            tree.column("screenshot", width=60)
+
+            tree_scroll = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=tree.yview)
+            tree.configure(yscrollcommand=tree_scroll.set)
+            tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+            tree.pack(fill=tk.BOTH, expand=True)
+
+            step_data = []
+            for i, step in enumerate(chain):
+                stype = step.get("type", "")
+                if stype == "switch_window":
+                    desc = f"[切换] {step.get('target', '')}"
+                    orig = ""
+                elif stype == "click":
+                    desc = f"点击{step.get('desc', '')}"
+                    orig = step.get("ocr", "") or step.get("desc", "")
+                elif stype == "input":
+                    desc = f"输入[{step.get('text', '')}]"
+                    orig = step.get("text", "")
+                elif stype == "keypress":
+                    desc = f"按{step.get('key', '')}"
+                    orig = step.get("key", "")
+                elif stype == "scroll":
+                    desc = f"{step.get('direction', '')}滚动"
+                    orig = ""
+                else:
+                    continue
+                count = step.get("_count", 1)
+                if count > 1:
+                    desc += f" x{count}"
+                ss_path = step.get("screenshot_path", "")
+                has_ss = "有" if ss_path else ""
+                iid = tree.insert("", tk.END, values=(desc, orig, orig, has_ss))
+                step_data.append({"iid": iid, "step": step, "original": orig, "screenshot_path": ss_path})
+
+            def _on_select(event=None):
+                sel = tree.selection()
+                if not sel:
+                    return
+                iid = sel[0]
+                for sd in step_data:
+                    if sd["iid"] == iid:
+                        ss = sd.get("screenshot_path", "")
+                        if ss and os.path.exists(ss):
+                            try:
+                                from PIL import Image, ImageTk
+                                img = Image.open(ss)
+                                img.thumbnail((250, 250))
+                                photo = ImageTk.PhotoImage(img)
+                                preview_img_label.configure(image=photo)
+                                preview_img_label.image = photo
+                                preview_label.configure(text=sd.get("original", ""))
+                            except Exception:
+                                preview_label.configure(text=f"截图加载失败")
+                        else:
+                            preview_img_label.configure(image="")
+                            preview_label.configure(text="无截图")
+                        break
+
+            tree.bind("<<TreeviewSelect>>", _on_select)
+
+            def _on_double_click(event=None):
+                sel = tree.selection()
+                if not sel:
+                    return
+                iid = sel[0]
+                col = tree.identify_column(event.x)
+                if col == "#3":
+                    bbox = tree.bbox(iid, col)
+                    if not bbox:
+                        return
+                    entry = tk.Entry(tree)
+                    entry.place(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
+                    current = tree.set(iid, "corrected")
+                    entry.insert(0, current)
+                    entry.select_range(0, tk.END)
+                    entry.focus_set()
+
+                    def _save_edit(e=None):
+                        new_val = entry.get()
+                        tree.set(iid, "corrected", new_val)
+                        entry.destroy()
+
+                    entry.bind("<Return>", _save_edit)
+                    entry.bind("<Escape>", lambda e: entry.destroy())
+                    entry.bind("<FocusOut>", _save_edit)
+
+            tree.bind("<Double-1>", _on_double_click)
+
+            def _apply_and_learn():
+                corrections = []
+                for sd in step_data:
+                    original = tree.set(sd["iid"], "original")
+                    corrected = tree.set(sd["iid"], "corrected")
+                    if corrected and corrected != original:
+                        corrections.append({
+                            "original": original,
+                            "corrected": corrected,
+                            "screenshot_path": sd.get("screenshot_path", ""),
+                        })
+                if corrections:
+                    try:
+                        from ocr_corrections import record_correction
+                        for c in corrections:
+                            if c["screenshot_path"]:
+                                record_correction(c["screenshot_path"], c["original"], c["corrected"])
+                        self.status_var.set(f"已学习 {len(corrections)} 条OCR修正")
+                    except Exception as ex:
+                        logger.warning("OCR修正保存失败: %s", ex)
+                top.destroy()
+
+            btn_frame = ttk.Frame(top)
+            btn_frame.pack(fill=tk.X, padx=4, pady=4)
+            ttk.Button(btn_frame, text="应用并学习修正", command=_apply_and_learn, width=14).pack(side=tk.LEFT, padx=4)
+            ttk.Label(btn_frame, text="双击[修正文本]列可编辑", foreground="#999").pack(side=tk.LEFT, padx=8)
+            ttk.Button(btn_frame, text="关闭", command=top.destroy, width=8).pack(side=tk.RIGHT, padx=4)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("编辑器错误", str(e))
+
+    def _ai_optimize_intent(self):
+        action_log.info("AI优化逻辑链条")
         if not self._current_script_name:
             return
         data = self.sm.load(self._current_script_name)
@@ -1925,19 +2485,20 @@ class AutoRepeatApp:
             return
         events = data.get("events", [])
         meta = data.get("meta", {})
-        self.status_var.set("AI重新生成意图描述中...")
+        self.status_var.set("AI优化逻辑链条中...")
         self.root.update_idletasks()
         try:
             import ai_recognizer
             intent = ai_recognizer.generate_intent_with_fallback(events, meta)
             if intent:
-                self.intent_var.set(intent)
-                self.status_var.set("AI意图已生成")
+                self.intent_text.delete("1.0", tk.END)
+                self.intent_text.insert("1.0", intent)
+                self.status_var.set("AI优化完成")
             else:
-                self.status_var.set("AI意图生成失败（未配置API Key？）")
+                self.status_var.set("AI优化失败（未配置API Key？）")
         except Exception as e:
-            logger.warning("AI意图重新生成失败: %s", e)
-            self.status_var.set(f"AI意图生成失败: {e}")
+            logger.warning("AI优化失败: %s", e)
+            self.status_var.set(f"AI优化失败: {e}")
 
     def _ask_skill_params(self, script_name, params):
         top = tk.Toplevel(self.root)
@@ -1990,7 +2551,7 @@ class AutoRepeatApp:
             import ai_recognizer
             status = ai_recognizer.get_ai_status()
             if status["online"]:
-                parts = ["🟢在线"]
+                parts = ["[在线]在线"]
                 if status["cloud_vision"]:
                     parts.append("视觉AI")
                 if status["cloud_text"]:
@@ -1999,7 +2560,7 @@ class AutoRepeatApp:
                     parts.append("TrOCR")
                 self.ai_status_var.set(" ".join(parts))
             else:
-                parts = ["🔴离网"]
+                parts = ["[离网]离网"]
                 if status["local_trocr"]:
                     parts.append("TrOCR")
                 parts.append("本地OCR")
@@ -2069,8 +2630,8 @@ class AutoRepeatApp:
             elif not browser_profile:
                 browser_profile = browser_engine.get_active_session_id()
 
-        self.player = Player(speed=speed, target_pid=target_pid, smart_replay=True,
-                             visual_match=True, scripts_dir=self._scripts_dir,
+        self.player = Player(speed=speed, target_pid=target_pid, smart_replay=self.smart_replay_var.get(),
+                             visual_match=self.visual_match_var.get(), scripts_dir=self._scripts_dir,
                              retry_count=3, on_error="continue",
                              use_ai_fallback=self.ai_fallback_var.get(),
                              browser_engine=browser_engine if engine_type in ("browser", "browser_dom", "auto") else None,
@@ -2165,6 +2726,7 @@ class AutoRepeatApp:
                             enabled_text, job.get("last_run", "-"), next_run or "-"))
 
     def _scheduler_add(self):
+        action_log.info("添加定时任务")
         scripts = self.sm.list_all()
         if not scripts:
             messagebox.showwarning("提示", "没有可用的脚本")
@@ -2223,6 +2785,7 @@ class AutoRepeatApp:
         self._build_scheduler_tab()
 
     def _scheduler_delete(self):
+        action_log.info("删除定时任务")
         sel = self.sched_tree.selection()
         if not sel:
             return
@@ -2234,6 +2797,7 @@ class AutoRepeatApp:
 
 
     def _ai_create_script(self, description):
+        action_log.info("AI创建脚本")
         self.status_var.set("AI创建脚本中...")
         self.root.update_idletasks()
         try:
@@ -2300,6 +2864,7 @@ class AutoRepeatApp:
                             enabled_text, w.get("last_triggered", "-")))
 
     def _watcher_add(self):
+        action_log.info("添加事件监视")
         scripts = self.sm.list_all()
         if not scripts:
             messagebox.showwarning("提示", "没有可用的脚本")
@@ -2355,6 +2920,7 @@ class AutoRepeatApp:
         self._build_watcher_tab()
 
     def _watcher_delete(self):
+        action_log.info("删除事件监视")
         sel = self.watch_tree.selection()
         if not sel:
             return
@@ -2365,6 +2931,7 @@ class AutoRepeatApp:
 
 
     def _check_permissions(self):
+        sync_log.debug("检查权限")
         if not IS_MAC:
             return True
         issues = []
@@ -2418,8 +2985,8 @@ class AutoRepeatApp:
         action_frame = ttk.Frame(self.browser_tab)
         action_frame.pack(fill=tk.X, padx=8, pady=8)
 
-        ttk.Button(action_frame, text="🌐 打开新浏览器", command=self._browser_open_new, width=16).pack(side=tk.LEFT, padx=4)
-        ttk.Button(action_frame, text="🔗 连接已有浏览器", command=self._browser_connect_cdp, width=16).pack(side=tk.LEFT, padx=4)
+        ttk.Button(action_frame, text="[浏览器] 打开新浏览器", command=self._browser_open_new, width=16).pack(side=tk.LEFT, padx=4)
+        ttk.Button(action_frame, text="[循环] 连接已有浏览器", command=self._browser_connect_cdp, width=16).pack(side=tk.LEFT, padx=4)
 
         if not self._browser_available:
             ttk.Label(action_frame, text="（需安装: pip install playwright && playwright install chromium）",
@@ -2433,11 +3000,12 @@ class AutoRepeatApp:
 
         tip_frame = ttk.Frame(self.browser_tab)
         tip_frame.pack(fill=tk.X, padx=8, pady=4)
-        ttk.Label(tip_frame, text="💡 每点一次「打开新浏览器」= 一个全新身份（独立Cookie/指纹/登录状态）\n"
+        ttk.Label(tip_frame, text="[提示] 每点一次「打开新浏览器」= 一个全新身份（独立Cookie/指纹/登录状态）\n"
                                    "登录不同账号用不同浏览器，互不干扰，网站无法识别是同一台电脑。",
                   foreground="#666", wraplength=600, justify="left").pack(anchor="w", padx=4)
 
     def _browser_open_new(self):
+        action_log.info("打开浏览器")
         if not self._browser_engine:
             messagebox.showwarning("提示", "Playwright未安装\n\npip install playwright\nplaywright install chromium")
             return
@@ -2459,6 +3027,7 @@ class AutoRepeatApp:
             messagebox.showerror("错误", "浏览器启动失败")
 
     def _browser_connect_cdp(self):
+        action_log.info("连接CDP")
         if not self._browser_engine:
             messagebox.showwarning("提示", "Playwright未安装")
             return
@@ -2473,6 +3042,7 @@ class AutoRepeatApp:
             messagebox.showerror("错误", "连接失败，请确认浏览器已开启远程调试")
 
     def _browser_close_session(self, session_id):
+        action_log.info("关闭浏览器会话")
         if self._browser_engine:
             self._browser_engine.close_identity(session_id)
         self._browser_sessions = [s for s in self._browser_sessions if s["id"] != session_id]
@@ -2496,13 +3066,14 @@ class AutoRepeatApp:
             except Exception:
                 pass
             url_display = url[:50] + "..." if len(url) > 50 else url
-            ttk.Label(row, text=f"🧑 {s['id']}", font=("", 10, "bold")).pack(side=tk.LEFT, padx=4)
+            ttk.Label(row, text=f"[用户] {s['id']}", font=("", 10, "bold")).pack(side=tk.LEFT, padx=4)
             if url_display:
                 ttk.Label(row, text=url_display, foreground="#888").pack(side=tk.LEFT, padx=4)
             ttk.Button(row, text="关闭", command=lambda sid=s["id"]: self._browser_close_session(sid),
                        width=6).pack(side=tk.RIGHT, padx=4)
 
     def _start_hotkey_listener(self):
+        sync_log.debug("启动快捷键监听")
         if not IS_MAC:
             return
         if not self._check_permissions():
@@ -2554,6 +3125,7 @@ class AutoRepeatApp:
             logger.warning("全局热键注册失败: %s", e)
 
     def _pump_ns_runloop(self):
+
         if not self.root.winfo_exists():
             return
         try:
@@ -2566,12 +3138,14 @@ class AutoRepeatApp:
         self.root.after(50, self._pump_ns_runloop)
 
     def _hotkey_toggle_record(self):
+        action_log.info("快捷键切换录制")
         if self.recording:
             self._stop_record()
         elif not self.playing:
             self._start_record_silent()
 
     def _hotkey_stop(self):
+        action_log.info("快捷键停止")
         if self.recording:
             self._stop_record()
         elif self.playing:
@@ -2629,6 +3203,7 @@ class AutoRepeatApp:
             webbrowser.open(url) if url else None
 
     def _on_close(self):
+        sync_log.debug("关闭窗口")
         if self.recording:
             self._stop_record()
         if self.playing:
@@ -2650,8 +3225,8 @@ class AutoRepeatApp:
         search_entry = ttk.Entry(search_frame, textvariable=self.market_search_var, width=30)
         search_entry.pack(side=tk.LEFT, padx=(0, 4))
         search_entry.bind("<Return>", lambda e: self._market_search())
-        ttk.Button(search_frame, text="🔍 搜索", command=self._market_search, width=8).pack(side=tk.LEFT, padx=4)
-        ttk.Button(search_frame, text="🔄 刷新", command=self._market_refresh, width=8).pack(side=tk.LEFT, padx=4)
+        ttk.Button(search_frame, text="[搜索] 搜索", command=self._market_search, width=8).pack(side=tk.LEFT, padx=4)
+        ttk.Button(search_frame, text="[滚动] 刷新", command=self._market_refresh, width=8).pack(side=tk.LEFT, padx=4)
 
         cols = ("name", "author", "tags", "steps", "description")
         self.market_tree = ttk.Treeview(self.market_tab, columns=cols, show="headings", height=10)
@@ -2673,11 +3248,11 @@ class AutoRepeatApp:
 
         action_frame = ttk.Frame(self.market_tab)
         action_frame.pack(fill=tk.X, pady=(4, 0))
-        ttk.Button(action_frame, text="📥 下载", command=self._market_download, width=10).pack(side=tk.LEFT, padx=3)
-        ttk.Button(action_frame, text="🔀 智能合并", command=self._market_merge, width=10).pack(side=tk.LEFT, padx=3)
-        ttk.Button(action_frame, text="📋 详情", command=self._market_detail, width=8).pack(side=tk.LEFT, padx=3)
+        ttk.Button(action_frame, text="[下载] 下载", command=self._market_download, width=10).pack(side=tk.LEFT, padx=3)
+        ttk.Button(action_frame, text="[分支] 智能合并", command=self._market_merge, width=10).pack(side=tk.LEFT, padx=3)
+        ttk.Button(action_frame, text="[列表] 详情", command=self._market_detail, width=8).pack(side=tk.LEFT, padx=3)
         ttk.Separator(action_frame, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=8)
-        ttk.Button(action_frame, text="📤 共享到GitHub", command=self._share_script, width=14).pack(side=tk.LEFT, padx=3)
+        ttk.Button(action_frame, text="[上传] 共享到GitHub", command=self._share_script, width=14).pack(side=tk.LEFT, padx=3)
 
         self._market_refresh()
 
@@ -2708,7 +3283,7 @@ class AutoRepeatApp:
             self.market_tree.insert("", tk.END, values=(
                 s.get("name", ""),
                 "本地",
-                "📁 本地",
+                "[文件] 本地",
                 s.get("events", ""),
                 "",
             ), tags=("local",))
@@ -2754,6 +3329,7 @@ class AutoRepeatApp:
         return None
 
     def _market_download(self):
+        action_log.info("下载脚本 entry=%s", entry.get("name", "?"))
         if self._is_local_selected():
             messagebox.showinfo("提示", "这是本地脚本，无需下载")
             return
@@ -2779,6 +3355,7 @@ class AutoRepeatApp:
         messagebox.showinfo("成功", f"脚本 '{name}' 已下载到本地")
 
     def _market_merge(self):
+        action_log.info("合并脚本")
         if self._is_local_selected():
             messagebox.showinfo("提示", "这是本地脚本，请选择远程脚本进行合并")
             return
@@ -2816,11 +3393,11 @@ class AutoRepeatApp:
         local_fp = mp.compute_fingerprint(local_data) if local_data else None
         detail = f"脚本: {name}\n"
         if self._is_local_selected():
-            detail += "来源: 📁 本地\n"
+            detail += "来源: [文件] 本地\n"
         else:
             entry = self._get_selected_market_script()
             if entry:
-                detail += f"来源: 🌐 远程\n"
+                detail += f"来源: [浏览器] 远程\n"
                 detail += f"作者: {entry.get('author', '')}\n"
                 detail += f"标签: {', '.join(entry.get('tags', []))}\n"
                 detail += f"描述: {entry.get('description', '')}\n"
@@ -2836,6 +3413,7 @@ class AutoRepeatApp:
         messagebox.showinfo("脚本详情", detail)
 
     def _share_script(self):
+        action_log.info("分享脚本 name=%s", self._current_script_name)
         if not self._is_local_selected():
             messagebox.showinfo("提示", "请选择一个本地脚本进行共享")
             return

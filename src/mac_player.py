@@ -206,6 +206,11 @@ class MacPlayer:
         self._start_wall_time = None
         self._execution_log = []
         self._variables = {}
+        try:
+            from adaptive_engine import AdaptiveEngine
+            self._adaptive = AdaptiveEngine(scripts_dir=scripts_dir, use_ai_fallback=use_ai_fallback)
+        except ImportError:
+            self._adaptive = None
 
     def stop(self):
         self._stop = True
@@ -282,6 +287,11 @@ class MacPlayer:
         if self.target_pid:
             _activate_app(self.target_pid)
             time.sleep(0.3)
+
+        if self.smart_replay and self._adaptive and self.target_pid:
+            cur_bounds = self._get_target_window_bounds({"pid": self.target_pid})
+            if cur_bounds:
+                self._adaptive.record_window_bounds(self.target_pid, cur_bounds)
 
         try:
             start_time = events[0]["time"] if events else 0
@@ -518,6 +528,17 @@ class MacPlayer:
                                    self._event_index, attempt + 1, max_attempts, e, self.retry_interval)
                     time.sleep(self.retry_interval)
                 else:
+                    if self.smart_replay and self._adaptive and etype in ("mouse_down", "type_text"):
+                        alt_paths = self._adaptive.find_alternative_path(event, "coordinate")
+                        for alt_type, alt_data in alt_paths:
+                            logger.info("尝试替代路径: %s", alt_type)
+                            if self._adaptive.execute_alternative(
+                                    alt_type, alt_data,
+                                    browser_engine=self._browser_engine,
+                                    browser_profile=self._browser_profile,
+                                    pid=event.get("pid") or self.target_pid):
+                                self._execution_log.append({"step": self._event_index, "type": etype, "status": "ok", "attempt": attempt, "alternative": alt_type})
+                                return
                     self._execution_log.append({"step": self._event_index, "type": etype, "status": "fail", "error": str(e)})
                     if self.on_error == "abort":
                         self._stop = True
@@ -549,18 +570,30 @@ class MacPlayer:
 
         win_bounds = self._get_target_window_bounds(event)
 
-        tpl_file = event.get("template")
-        if tpl_file and self.scripts_dir:
-            for subdir in ["scripts/templates", "templates"]:
-                tpl_path = os.path.join(self.scripts_dir, subdir, tpl_file)
-                if os.path.exists(tpl_path):
-                    result = template_match(tpl_path, window_bounds=win_bounds)
-                    if result:
-                        new_x, new_y, confidence = result
-                        logger.info("视觉匹配: %s 原始=(%.0f,%.0f) 新=(%.0f,%.0f) 置信度=%.2f", tpl_file, event["x"], event["y"], new_x, new_y, confidence)
-                        return new_x, new_y
-                    logger.warning("视觉匹配失败: %s, 尝试OCR", tpl_file)
-                    break
+        if self.smart_replay and self._adaptive and win_bounds:
+            recorded_bounds = event.get("window_bounds") or event.get("window")
+            if recorded_bounds:
+                adapted_x, adapted_y = self._adaptive.adapt_coordinates(
+                    event["x"], event["y"], recorded_bounds, win_bounds)
+                if adapted_x != event["x"] or adapted_y != event["y"]:
+                    logger.info("坐标适配: 原始=(%.0f,%.0f) 适配=(%.0f,%.0f)", event["x"], event["y"], adapted_x, adapted_y)
+                    event = dict(event)
+                    event["x"] = adapted_x
+                    event["y"] = adapted_y
+
+        if self.visual_match:
+            tpl_file = event.get("template")
+            if tpl_file and self.scripts_dir:
+                for subdir in ["scripts/templates", "templates"]:
+                    tpl_path = os.path.join(self.scripts_dir, subdir, tpl_file)
+                    if os.path.exists(tpl_path):
+                        result = template_match(tpl_path, window_bounds=win_bounds)
+                        if result:
+                            new_x, new_y, confidence = result
+                            logger.info("视觉匹配: %s 原始=(%.0f,%.0f) 新=(%.0f,%.0f) 置信度=%.2f", tpl_file, event["x"], event["y"], new_x, new_y, confidence)
+                            return new_x, new_y
+                        logger.warning("视觉匹配失败: %s, 尝试OCR", tpl_file)
+                        break
 
         anchor = event.get("ocr_anchor")
         if anchor:
@@ -888,6 +921,27 @@ class MacPlayer:
     def _do_wait_for(self, event):
         strategy = event.get("strategy", "template")
         timeout = event.get("timeout", 10)
+        if self.smart_replay and self._adaptive:
+            tpl_file = event.get("template")
+            tpl_path = None
+            if tpl_file and self.scripts_dir:
+                for subdir in ["scripts/templates", "templates"]:
+                    p = os.path.join(self.scripts_dir, subdir, tpl_file)
+                    if os.path.exists(p):
+                        tpl_path = p
+                        break
+            ocr_text = event.get("text") if strategy == "ocr" else None
+            ax_role = event.get("ax_element", {}).get("AXRole", "") if strategy == "element_visible" else ""
+            ax_title = event.get("ax_element", {}).get("AXTitle", "") if strategy == "element_visible" else ""
+            result = self._adaptive.smart_wait(
+                strategy=strategy, timeout=timeout,
+                template_path=tpl_path, ocr_text=ocr_text,
+                ax_role=ax_role, ax_title=ax_title)
+            if result:
+                logger.info("智能等待满足: %s", strategy)
+            else:
+                logger.warning("智能等待超时: %s (%ds)", strategy, timeout)
+            return
         interval = event.get("interval", 0.5)
         start = time.time()
         while time.time() - start < timeout:
@@ -950,6 +1004,8 @@ class MacPlayer:
             except Exception:
                 return False
         elif strategy == "pixel_change":
+            if self._adaptive:
+                return self._adaptive._check_pixel_change()
             return True
         elif strategy == "element":
             if HAS_ACCESSIBILITY:
