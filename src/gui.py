@@ -296,6 +296,7 @@ class AutoRepeatApp:
         ttk.Button(search_row, text="全部", command=self._refresh_scripts, width=4).pack(side=tk.LEFT, padx=2)
         ttk.Separator(search_row, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
         ttk.Button(search_row, text="编辑", command=self._open_editor, width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Button(search_row, text="[VIS]可视化", command=self._open_visual_editor, width=6).pack(side=tk.LEFT, padx=2)
         ttk.Button(search_row, text="重命名", command=self._rename, width=5).pack(side=tk.LEFT, padx=2)
         ttk.Button(search_row, text="删除", command=self._delete, width=4).pack(side=tk.LEFT, padx=2)
         ttk.Button(search_row, text="刷新", command=self._refresh_scripts, width=4).pack(side=tk.LEFT, padx=2)
@@ -1046,6 +1047,49 @@ class AutoRepeatApp:
         if messagebox.askyesno("确认", f"删除脚本: {name}?"):
             self.sm.delete(name)
             self._refresh_scripts()
+
+
+    def _open_visual_editor(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("提示", "请先选择一个脚本")
+            return
+        item = self.tree.item(sel[0])
+        name = item["values"][0]
+        action_log.info("打开可视化编辑器 name=%s", name)
+        try:
+            from visual_editor import VisualEditor
+            data = self.sm.load(name)
+            events = data.get("events", []) if data else []
+            if not hasattr(self, '_visual_editor'):
+                self._visual_editor = VisualEditor(
+                    scripts_dir=self._scripts_dir,
+                    on_save=self._visual_editor_save,
+                    on_run=self._visual_editor_run,
+                )
+            self._visual_editor._on_save_cb = lambda ev, xml: self._visual_editor_save_with_name(name, ev, xml)
+            self._visual_editor.open(events=events)
+        except ImportError:
+            messagebox.showerror("错误", "pywebview未安装\n请运行: pip install pywebview")
+        except Exception as e:
+            messagebox.showerror("错误", f"可视化编辑器启动失败: {e}")
+
+    def _visual_editor_save_with_name(self, script_name, events, blockly_xml=""):
+        try:
+            self.sm.save(script_name, events, {"blockly_xml": blockly_xml, "source": "visual_editor"})
+            self._refresh_scripts()
+            action_log.info("可视化编辑器保存: %s (%d events)", script_name, len(events))
+            return {"ok": True, "name": script_name}
+        except Exception as e:
+            action_log.error("可视化编辑器保存失败: %s", e)
+            return {"ok": False, "error": str(e)}
+
+    def _visual_editor_run(self, events):
+        try:
+            action_log.info("可视化编辑器运行: %d events", len(events))
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def _open_editor(self):
         sel = self.tree.selection()

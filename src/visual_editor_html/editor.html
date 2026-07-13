@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>GhostAction Visual Editor</title>
+<script src="https://unpkg.com/blockly/blockly.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #1a1a2e; color: #e0e0e0; overflow: hidden; height: 100vh; }
+#toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #16213e; border-bottom: 1px solid #0f3460; }
+#toolbar button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+#toolbar button:hover { filter: brightness(1.15); }
+#btn-save { background: #4caf50; color: white; }
+#btn-load { background: #2196f3; color: white; }
+#btn-record { background: #ff5722; color: white; }
+#btn-run { background: #ff9800; color: white; }
+#btn-clear { background: #666; color: white; }
+#title { color: #e94560; font-size: 16px; font-weight: 700; margin-right: 12px; letter-spacing: 0.5px; }
+#blocklyArea { width: 100%; height: calc(100vh - 45px); }
+#statusbar { position: fixed; bottom: 0; left: 0; right: 0; padding: 4px 16px; background: #16213e; border-top: 1px solid #0f3460; font-size: 11px; color: #888; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <span id="title">GhostAction</span>
+  <button id="btn-save" onclick="saveScript()">Save</button>
+  <button id="btn-load" onclick="loadScript()">Load</button>
+  <button id="btn-run" onclick="runScript()">Run</button>
+  <button id="btn-record" onclick="recordScript()">Record</button>
+  <button id="btn-clear" onclick="clearWorkspace()">Clear</button>
+</div>
+<div id="blocklyArea"></div>
+<div id="statusbar">
+  <span id="status-left">Ready</span>
+  <span id="status-right">v2.2.0</span>
+</div>
+
+<xml id="toolbox">
+<category name="Mouse" colour="%{BKY_MOUSE_CATEGORY_HUE}">
+  <block type="ga_click"></block>
+  <block type="ga_right_click"></block>
+  <block type="ga_double_click"></block>
+  <block type="ga_drag"></block>
+  <block type="ga_scroll"></block>
+</category>
+<category name="Keyboard" colour="%{BKY_KEYBOARD_CATEGORY_HUE}">
+  <block type="ga_type_text"></block>
+  <block type="ga_key_press"></block>
+  <block type="ga_shortcut"></block>
+  <block type="ga_hotkey"></block>
+</category>
+<category name="Wait" colour="%{BKY_WAIT_CATEGORY_HUE}">
+  <block type="ga_wait"></block>
+  <block type="ga_wait_for_text"></block>
+  <block type="ga_wait_for_image"></block>
+</category>
+<category name="Logic" colour="%{BKY_LOGIC_HUE}">
+  <block type="ga_if_visible"></block>
+  <block type="ga_if_text"></block>
+  <block type="controls_if"></block>
+  <block type="logic_compare"></block>
+</category>
+<category name="Loops" colour="%{BKY_LOOPS_HUE}">
+  <block type="ga_repeat"></block>
+  <block type="controls_repeat_ext"></block>
+  <block type="controls_whileUntil"></block>
+</category>
+<category name="Variables" colour="%{BKY_VARIABLES_HUE}">
+  <block type="ga_set_variable"></block>
+  <block type="ga_get_variable"></block>
+  <block type="ga_ocr_read"></block>
+  <block type="ga_clipboard_read"></block>
+</category>
+<category name="Advanced" colour="%{BKY_ADVANCED_CATEGORY_HUE}">
+  <block type="ga_activate_app"></block>
+  <block type="ga_screenshot"></block>
+  <block type="ga_call_script"></block>
+  <block type="ga_comment"></block>
+  <block type="ga_ai_recognize"></block>
+</category>
+</xml>
+
+<script>
+Blockly.defineBlocksWithJsonArray([
+  {
+    "type": "ga_click",
+    "message0": "Click at %1 , %2 %3",
+    "args0": [
+      {"type": "field_number", "name": "X", "value": 100},
+      {"type": "field_number", "name": "Y", "value": 200},
+      {"type": "field_dropdown", "name": "BUTTON", "options": [["left","left"],["right","right"],["middle","middle"]]}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 20,
+    "tooltip": "Click at coordinates"
+  },
+  {
+    "type": "ga_right_click",
+    "message0": "Right click at %1 , %2",
+    "args0": [
+      {"type": "field_number", "name": "X", "value": 100},
+      {"type": "field_number", "name": "Y", "value": 200}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 20,
+    "tooltip": "Right click at coordinates"
+  },
+  {
+    "type": "ga_double_click",
+    "message0": "Double click at %1 , %2",
+    "args0": [
+      {"type": "field_number", "name": "X", "value": 100},
+      {"type": "field_number", "name": "Y", "value": 200}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 20,
+    "tooltip": "Double click at coordinates"
+  },
+  {
+    "type": "ga_drag",
+    "message0": "Drag from %1 , %2 to %3 , %4",
+    "args0": [
+      {"type": "field_number", "name": "X1", "value": 100},
+      {"type": "field_number", "name": "Y1", "value": 100},
+      {"type": "field_number", "name": "X2", "value": 300},
+      {"type": "field_number", "name": "Y2", "value": 300}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 20,
+    "tooltip": "Drag from one point to another"
+  },
+  {
+    "type": "ga_scroll",
+    "message0": "Scroll %1 by %2",
+    "args0": [
+      {"type": "field_dropdown", "name": "DIR", "options": [["down","down"],["up","up"]]},
+      {"type": "field_number", "name": "AMOUNT", "value": 3, "min": 1}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 20,
+    "tooltip": "Scroll up or down"
+  },
+  {
+    "type": "ga_type_text",
+    "message0": "Type text %1",
+    "args0": [{"type": "field_input", "name": "TEXT", "text": "hello"}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 40,
+    "tooltip": "Type text string"
+  },
+  {
+    "type": "ga_key_press",
+    "message0": "Press key %1",
+    "args0": [{"type": "field_dropdown", "name": "KEY", "options": [
+      ["Enter","Enter"],["Tab","Tab"],["Escape","Esc"],["Backspace","Backspace"],
+      ["Delete","Delete"],["Space","Space"],["Up","Up"],["Down","Down"],["Left","Left"],["Right","Right"],
+      ["F1","F1"],["F2","F2"],["F3","F3"],["F4","F4"],["F5","F5"],["F6","F6"],
+      ["F7","F7"],["F8","F8"],["F9","F9"],["F10","F10"],["F11","F11"],["F12","F12"]
+    ]}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 40,
+    "tooltip": "Press a special key"
+  },
+  {
+    "type": "ga_shortcut",
+    "message0": "Shortcut %1 + %2",
+    "args0": [
+      {"type": "field_dropdown", "name": "MOD", "options": [["Ctrl","ctrl"],["Alt","alt"],["Shift","shift"],["Cmd","cmd"]]},
+      {"type": "field_input", "name": "KEY", "text": "c"}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 40,
+    "tooltip": "Keyboard shortcut"
+  },
+  {
+    "type": "ga_hotkey",
+    "message0": "Hotkey %1 + %2 + %3",
+    "args0": [
+      {"type": "field_dropdown", "name": "MOD1", "options": [["Ctrl","ctrl"],["Cmd","cmd"],["Alt","alt"],["Shift","shift"]]},
+      {"type": "field_dropdown", "name": "MOD2", "options": [["Shift","shift"],["Alt","alt"],["(none)",""]]},
+      {"type": "field_input", "name": "KEY", "text": "s"}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 40,
+    "tooltip": "Multi-modifier hotkey"
+  },
+  {
+    "type": "ga_wait",
+    "message0": "Wait %1 seconds",
+    "args0": [{"type": "field_number", "name": "SECONDS", "value": 1, "min": 0.1, "precision": 0.1}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 60,
+    "tooltip": "Wait for a duration"
+  },
+  {
+    "type": "ga_wait_for_text",
+    "message0": "Wait for text %1 on screen (timeout %2 s)",
+    "args0": [
+      {"type": "field_input", "name": "TEXT", "text": "OK"},
+      {"type": "field_number", "name": "TIMEOUT", "value": 10}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 60,
+    "tooltip": "Wait until text appears on screen"
+  },
+  {
+    "type": "ga_wait_for_image",
+    "message0": "Wait for image %1 (timeout %2 s)",
+    "args0": [
+      {"type": "field_input", "name": "IMAGE", "text": "template.png"},
+      {"type": "field_number", "name": "TIMEOUT", "value": 10}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 60,
+    "tooltip": "Wait until image appears on screen"
+  },
+  {
+    "type": "ga_if_visible",
+    "message0": "If text %1 is visible",
+    "args0": [{"type": "field_input", "name": "TEXT", "text": "Login"}],
+    "message1": "do %1",
+    "args1": [{"type": "input_statement", "name": "DO"}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 210,
+    "tooltip": "Conditional: if text is visible on screen"
+  },
+  {
+    "type": "ga_if_text",
+    "message0": "If OCR reads %1 at %2 , %3",
+    "args0": [
+      {"type": "field_input", "name": "TEXT", "text": ""},
+      {"type": "field_number", "name": "X", "value": 100},
+      {"type": "field_number", "name": "Y", "value": 200}
+    ],
+    "message1": "do %1",
+    "args1": [{"type": "input_statement", "name": "DO"}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 210,
+    "tooltip": "Conditional: if OCR finds text at location"
+  },
+  {
+    "type": "ga_repeat",
+    "message0": "Repeat %1 times",
+    "args0": [{"type": "field_number", "name": "COUNT", "value": 3, "min": 1}],
+    "message1": "do %1",
+    "args1": [{"type": "input_statement", "name": "DO"}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 120,
+    "tooltip": "Repeat actions N times"
+  },
+  {
+    "type": "ga_set_variable",
+    "message0": "Set %1 = %2",
+    "args0": [
+      {"type": "field_input", "name": "NAME", "text": "my_var"},
+      {"type": "field_input", "name": "VALUE", "text": ""}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 330,
+    "tooltip": "Set a variable value"
+  },
+  {
+    "type": "ga_get_variable",
+    "message0": "%1",
+    "args0": [{"type": "field_input", "name": "NAME", "text": "my_var"}],
+    "output": null,
+    "colour": 330,
+    "tooltip": "Get a variable value"
+  },
+  {
+    "type": "ga_ocr_read",
+    "message0": "OCR read at %1 , %2",
+    "args0": [
+      {"type": "field_number", "name": "X", "value": 100},
+      {"type": "field_number", "name": "Y", "value": 200}
+    ],
+    "output": null,
+    "colour": 330,
+    "tooltip": "Read text at location via OCR"
+  },
+  {
+    "type": "ga_clipboard_read",
+    "message0": "Read clipboard",
+    "output": null,
+    "colour": 330,
+    "tooltip": "Read clipboard content"
+  },
+  {
+    "type": "ga_activate_app",
+    "message0": "Activate app PID %1",
+    "args0": [{"type": "field_number", "name": "PID", "value": 0}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 290,
+    "tooltip": "Activate/bring to front an application"
+  },
+  {
+    "type": "ga_screenshot",
+    "message0": "Take screenshot",
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 290,
+    "tooltip": "Capture screenshot"
+  },
+  {
+    "type": "ga_call_script",
+    "message0": "Call script %1",
+    "args0": [{"type": "field_input", "name": "NAME", "text": "sub_script"}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 290,
+    "tooltip": "Call another script"
+  },
+  {
+    "type": "ga_comment",
+    "message0": "Note: %1",
+    "args0": [{"type": "field_input", "name": "TEXT", "text": ""}],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 290,
+    "tooltip": "Comment/note (no action)"
+  },
+  {
+    "type": "ga_ai_recognize",
+    "message0": "AI recognize %1 save to %2",
+    "args0": [
+      {"type": "field_input", "name": "PROMPT", "text": "Identify captcha"},
+      {"type": "field_input", "name": "VARIABLE", "text": "result"}
+    ],
+    "previousStatement": null,
+    "nextStatement": null,
+    "colour": 290,
+    "tooltip": "AI-powered recognition"
+  }
+]);
+
+var workspace;
+var pywebview_api = window.pywebview || {};
+
+function initBlockly() {
+  workspace = Blockly.inject('blocklyArea', {
+    toolbox: document.getElementById('toolbox'),
+    grid: {spacing: 20, length: 3, colour: '#2a2a4a', snap: true},
+    zoom: {controls: true, wheel: true, startScale: 1.0, maxScale: 3, minScale: 0.3, scaleSpeed: 1.2},
+    trashcan: true,
+    sounds: false,
+    renderer: 'zelos',
+    theme: Blockly.Theme.Classic
+  });
+  workspace.addChangeListener(function(e) {
+    if (e.isUiEvent) return;
+    document.getElementById('status-left').textContent = 'Modified';
+  });
+  window.addEventListener('resize', function() {
+    Blockly.svgResize(workspace);
+  });
+  Blockly.svgResize(workspace);
+  document.getElementById('status-left').textContent = 'Ready';
+}
+
+function blocksToEvents() {
+  var blocks = workspace.getTopBlocks(true);
+  var events = [];
+  var time = 0;
+  for (var i = 0; i < blocks.length; i++) {
+    var block = blocks[i];
+    var result = processBlock(block, time);
+    events = events.concat(result.events);
+    time = result.time;
+  }
+  return events;
+}
+
+function processBlock(block, time) {
+  var events = [];
+  var type = block.type;
+  if (type === 'ga_click') {
+    events.push({type:'mouse_down', x:block.getFieldValue('X'), y:block.getFieldValue('Y'), button:block.getFieldValue('BUTTON'), time:time});
+    events.push({type:'mouse_up', x:block.getFieldValue('X'), y:block.getFieldValue('Y'), button:block.getFieldValue('BUTTON'), time:time+0.05});
+    time += 0.3;
+  } else if (type === 'ga_right_click') {
+    events.push({type:'mouse_down', x:block.getFieldValue('X'), y:block.getFieldValue('Y'), button:'right', time:time});
+    events.push({type:'mouse_up', x:block.getFieldValue('X'), y:block.getFieldValue('Y'), button:'right', time:time+0.05});
+    time += 0.3;
+  } else if (type === 'ga_double_click') {
+    var x = block.getFieldValue('X'), y = block.getFieldValue('Y');
+    events.push({type:'mouse_down', x:x, y:y, button:'left', time:time});
+    events.push({type:'mouse_up', x:x, y:y, button:'left', time:time+0.05});
+    events.push({type:'mouse_down', x:x, y:y, button:'left', time:time+0.1});
+    events.push({type:'mouse_up', x:x, y:y, button:'left', time:time+0.15});
+    time += 0.4;
+  } else if (type === 'ga_drag') {
+    events.push({type:'mouse_down', x:block.getFieldValue('X1'), y:block.getFieldValue('Y1'), button:'left', time:time});
+    events.push({type:'mouse_drag', x:block.getFieldValue('X2'), y:block.getFieldValue('Y2'), button:'left', time:time+0.3});
+    events.push({type:'mouse_up', x:block.getFieldValue('X2'), y:block.getFieldValue('Y2'), button:'left', time:time+0.35});
+    time += 0.5;
+  } else if (type === 'ga_scroll') {
+    var dir = block.getFieldValue('DIR');
+    var amount = parseInt(block.getFieldValue('AMOUNT'));
+    events.push({type:'scroll', x:0, y:0, dx:0, dy:dir==='down'?amount:-amount, time:time});
+    time += 0.3;
+  } else if (type === 'ga_type_text') {
+    events.push({type:'type_text', text:block.getFieldValue('TEXT'), time:time});
+    time += 0.1;
+  } else if (type === 'ga_key_press') {
+    var keyName = block.getFieldValue('KEY');
+    events.push({type:'key_down', key_name:keyName, text:keyName.toLowerCase(), time:time});
+    events.push({type:'key_up', key_name:keyName, text:keyName.toLowerCase(), time:time+0.05});
+    time += 0.1;
+  } else if (type === 'ga_shortcut') {
+    var mod = block.getFieldValue('MOD');
+    var key = block.getFieldValue('KEY');
+    events.push({type:'key_down', modifiers:[mod], text:key.toLowerCase(), time:time});
+    events.push({type:'key_up', modifiers:[mod], text:key.toLowerCase(), time:time+0.05});
+    time += 0.1;
+  } else if (type === 'ga_hotkey') {
+    var m1 = block.getFieldValue('MOD1');
+    var m2 = block.getFieldValue('MOD2');
+    var mods = [m1];
+    if (m2) mods.push(m2);
+    var hk = block.getFieldValue('KEY');
+    events.push({type:'key_down', modifiers:mods, text:hk.toLowerCase(), time:time});
+    events.push({type:'key_up', modifiers:mods, text:hk.toLowerCase(), time:time+0.05});
+    time += 0.1;
+  } else if (type === 'ga_wait') {
+    events.push({type:'wait_for', strategy:'timeout', timeout:parseFloat(block.getFieldValue('SECONDS')), time:time});
+    time += parseFloat(block.getFieldValue('SECONDS'));
+  } else if (type === 'ga_wait_for_text') {
+    events.push({type:'wait_for', strategy:'ocr', text:block.getFieldValue('TEXT'), timeout:parseInt(block.getFieldValue('TIMEOUT')), time:time});
+    time += 1;
+  } else if (type === 'ga_wait_for_image') {
+    events.push({type:'wait_for', strategy:'template', template:block.getFieldValue('IMAGE'), timeout:parseInt(block.getFieldValue('TIMEOUT')), time:time});
+    time += 1;
+  } else if (type === 'ga_if_visible') {
+    events.push({type:'if', condition:'ocr_text', text:block.getFieldValue('TEXT'), time:time});
+    var doBlock = block.getInputTargetBlock('DO');
+    if (doBlock) {
+      var r = processBlockChain(doBlock, time);
+      events = events.concat(r.events);
+      time = r.time;
+    }
+    events.push({type:'endif', time:time});
+    time += 0.1;
+  } else if (type === 'ga_if_text') {
+    events.push({type:'if', condition:'ocr_at', text:block.getFieldValue('TEXT'), x:parseInt(block.getFieldValue('X')), y:parseInt(block.getFieldValue('Y')), time:time});
+    var doBlock2 = block.getInputTargetBlock('DO');
+    if (doBlock2) {
+      var r2 = processBlockChain(doBlock2, time);
+      events = events.concat(r2.events);
+      time = r2.time;
+    }
+    events.push({type:'endif', time:time});
+    time += 0.1;
+  } else if (type === 'ga_repeat') {
+    events.push({type:'for', count:parseInt(block.getFieldValue('COUNT')), variable:'_i', time:time});
+    var doBlock3 = block.getInputTargetBlock('DO');
+    if (doBlock3) {
+      var r3 = processBlockChain(doBlock3, time);
+      events = events.concat(r3.events);
+      time = r3.time;
+    }
+    events.push({type:'endfor', time:time});
+    time += 0.1;
+  } else if (type === 'ga_set_variable') {
+    events.push({type:'set_variable', name:block.getFieldValue('NAME'), value:block.getFieldValue('VALUE'), value_from:'literal', time:time});
+    time += 0.05;
+  } else if (type === 'ga_activate_app') {
+    events.push({type:'activate', pid:parseInt(block.getFieldValue('PID')), time:time});
+    time += 0.5;
+  } else if (type === 'ga_screenshot') {
+    events.push({type:'screenshot', time:time});
+    time += 0.1;
+  } else if (type === 'ga_call_script') {
+    events.push({type:'call_script', script_name:block.getFieldValue('NAME'), time:time});
+    time += 0.1;
+  } else if (type === 'ga_comment') {
+    events.push({type:'comment', text:block.getFieldValue('TEXT'), time:time});
+    time += 0.01;
+  } else if (type === 'ga_ai_recognize') {
+    events.push({type:'ai_recognize', prompt:block.getFieldValue('PROMPT'), variable:block.getFieldValue('VARIABLE'), mode:'vision', time:time});
+    time += 1;
+  }
+  return {events: events, time: time};
+}
+
+function processBlockChain(startBlock, time) {
+  var events = [];
+  var block = startBlock;
+  while (block) {
+    var result = processBlock(block, time);
+    events = events.concat(result.events);
+    time = result.time;
+    block = block.getNextBlock();
+  }
+  return {events: events, time: time};
+}
+
+function eventsToBlocks(events) {
+  workspace.clear();
+  var topBlock = null;
+  var lastBlock = null;
+  var i = 0;
+  while (i < events.length) {
+    var ev = events[i];
+    var newBlock = null;
+    if (ev.type === 'mouse_down' && ev.button === 'left') {
+      if (i + 1 < events.length && events[i+1].type === 'mouse_up' && events[i+1].button === 'left') {
+        if (i + 3 < events.length && events[i+2].type === 'mouse_down' && events[i+3].type === 'mouse_up') {
+          newBlock = workspace.newBlock('ga_double_click');
+          newBlock.setFieldValue(String(ev.x), 'X');
+          newBlock.setFieldValue(String(ev.y), 'Y');
+          newBlock.initSvg();
+          newBlock.render();
+          i += 4; continue;
+        }
+        newBlock = workspace.newBlock('ga_click');
+        newBlock.setFieldValue(String(Math.round(ev.x)), 'X');
+        newBlock.setFieldValue(String(Math.round(ev.y)), 'Y');
+        newBlock.setFieldValue(ev.button || 'left', 'BUTTON');
+        i += 2;
+      }
+    } else if (ev.type === 'mouse_down' && ev.button === 'right') {
+      newBlock = workspace.newBlock('ga_right_click');
+      newBlock.setFieldValue(String(Math.round(ev.x)), 'X');
+      newBlock.setFieldValue(String(Math.round(ev.y)), 'Y');
+      i += 2;
+    } else if (ev.type === 'type_text') {
+      newBlock = workspace.newBlock('ga_type_text');
+      newBlock.setFieldValue(ev.text || '', 'TEXT');
+      i += 1;
+    } else if (ev.type === 'key_down' && ev.modifiers && ev.modifiers.length === 1) {
+      newBlock = workspace.newBlock('ga_shortcut');
+      newBlock.setFieldValue(ev.modifiers[0], 'MOD');
+      newBlock.setFieldValue(ev.text || '', 'KEY');
+      i += 2;
+    } else if (ev.type === 'key_down' && ev.modifiers && ev.modifiers.length >= 2) {
+      newBlock = workspace.newBlock('ga_hotkey');
+      newBlock.setFieldValue(ev.modifiers[0], 'MOD1');
+      newBlock.setFieldValue(ev.modifiers.length > 1 ? ev.modifiers[1] : '', 'MOD2');
+      newBlock.setFieldValue(ev.text || '', 'KEY');
+      i += 2;
+    } else if (ev.type === 'scroll') {
+      newBlock = workspace.newBlock('ga_scroll');
+      newBlock.setFieldValue(ev.dy > 0 ? 'down' : 'up', 'DIR');
+      newBlock.setFieldValue(String(Math.abs(ev.dy)), 'AMOUNT');
+      i += 1;
+    } else if (ev.type === 'wait_for') {
+      if (ev.strategy === 'timeout') {
+        newBlock = workspace.newBlock('ga_wait');
+        newBlock.setFieldValue(String(ev.timeout || 1), 'SECONDS');
+      } else if (ev.strategy === 'ocr') {
+        newBlock = workspace.newBlock('ga_wait_for_text');
+        newBlock.setFieldValue(ev.text || '', 'TEXT');
+        newBlock.setFieldValue(String(ev.timeout || 10), 'TIMEOUT');
+      } else if (ev.strategy === 'template') {
+        newBlock = workspace.newBlock('ga_wait_for_image');
+        newBlock.setFieldValue(ev.template || '', 'IMAGE');
+        newBlock.setFieldValue(String(ev.timeout || 10), 'TIMEOUT');
+      }
+      i += 1;
+    } else if (ev.type === 'for') {
+      newBlock = workspace.newBlock('ga_repeat');
+      newBlock.setFieldValue(String(ev.count || 1), 'COUNT');
+      var endIdx = i + 1;
+      var depth = 1;
+      while (endIdx < events.length && depth > 0) {
+        if (events[endIdx].type === 'for') depth++;
+        else if (events[endIdx].type === 'endfor') depth--;
+        endIdx++;
+      }
+      var bodyEvents = events.slice(i + 1, endIdx - 1);
+      if (bodyEvents.length > 0) {
+        var bodyResult = eventsToBlocksInner(bodyEvents);
+        if (bodyResult) {
+          var doInput = newBlock.getInput('DO');
+          if (doInput && bodyResult) {
+            var bodyConn = doInput.connection;
+            var firstBodyBlock = bodyResult;
+            bodyConn.connect(firstBodyBlock.previousConnection);
+          }
+        }
+      }
+      i = endIdx;
+    } else if (ev.type === 'set_variable') {
+      newBlock = workspace.newBlock('ga_set_variable');
+      newBlock.setFieldValue(ev.name || '', 'NAME');
+      newBlock.setFieldValue(ev.value || '', 'VALUE');
+      i += 1;
+    } else if (ev.type === 'comment') {
+      newBlock = workspace.newBlock('ga_comment');
+      newBlock.setFieldValue(ev.text || '', 'TEXT');
+      i += 1;
+    } else if (ev.type === 'activate') {
+      newBlock = workspace.newBlock('ga_activate_app');
+      newBlock.setFieldValue(String(ev.pid || 0), 'PID');
+      i += 1;
+    } else if (ev.type === 'call_script') {
+      newBlock = workspace.newBlock('ga_call_script');
+      newBlock.setFieldValue(ev.script_name || '', 'NAME');
+      i += 1;
+    } else if (ev.type === 'ai_recognize') {
+      newBlock = workspace.newBlock('ga_ai_recognize');
+      newBlock.setFieldValue(ev.prompt || '', 'PROMPT');
+      newBlock.setFieldValue(ev.variable || '', 'VARIABLE');
+      i += 1;
+    } else {
+      i += 1; continue;
+    }
+    if (newBlock) {
+      newBlock.initSvg();
+      newBlock.render();
+      if (!topBlock) topBlock = newBlock;
+      if (lastBlock && lastBlock.nextConnection && newBlock.previousConnection) {
+        lastBlock.nextConnection.connect(newBlock.previousConnection);
+      }
+      lastBlock = newBlock;
+    }
+  }
+  workspace.scrollCenter();
+}
+
+function eventsToBlocksInner(events) {
+  if (!events || events.length === 0) return null;
+  var topBlock = null;
+  var lastBlock = null;
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    var newBlock = null;
+    if (ev.type === 'mouse_down') {
+      newBlock = workspace.newBlock('ga_click');
+      newBlock.setFieldValue(String(Math.round(ev.x)), 'X');
+      newBlock.setFieldValue(String(Math.round(ev.y)), 'Y');
+      newBlock.setFieldValue(ev.button || 'left', 'BUTTON');
+    } else if (ev.type === 'type_text') {
+      newBlock = workspace.newBlock('ga_type_text');
+      newBlock.setFieldValue(ev.text || '', 'TEXT');
+    } else if (ev.type === 'key_down') {
+      if (ev.modifiers && ev.modifiers.length > 0) {
+        newBlock = workspace.newBlock('ga_shortcut');
+        newBlock.setFieldValue(ev.modifiers[0], 'MOD');
+        newBlock.setFieldValue(ev.text || '', 'KEY');
+      }
+    } else if (ev.type === 'scroll') {
+      newBlock = workspace.newBlock('ga_scroll');
+      newBlock.setFieldValue(ev.dy > 0 ? 'down' : 'up', 'DIR');
+      newBlock.setFieldValue(String(Math.abs(ev.dy)), 'AMOUNT');
+    } else if (ev.type === 'wait_for') {
+      newBlock = workspace.newBlock('ga_wait');
+      newBlock.setFieldValue(String(ev.timeout || 1), 'SECONDS');
+    } else if (ev.type === 'set_variable') {
+      newBlock = workspace.newBlock('ga_set_variable');
+      newBlock.setFieldValue(ev.name || '', 'NAME');
+      newBlock.setFieldValue(ev.value || '', 'VALUE');
+    } else if (ev.type === 'comment') {
+      newBlock = workspace.newBlock('ga_comment');
+      newBlock.setFieldValue(ev.text || '', 'TEXT');
+    }
+    if (newBlock) {
+      newBlock.initSvg();
+      newBlock.render();
+      if (!topBlock) topBlock = newBlock;
+      if (lastBlock && lastBlock.nextConnection && newBlock.previousConnection) {
+        lastBlock.nextConnection.connect(newBlock.previousConnection);
+      }
+      lastBlock = newBlock;
+    }
+  }
+  return topBlock;
+}
+
+function saveScript() {
+  var events = blocksToEvents();
+  if (events.length === 0) {
+    document.getElementById('status-left').textContent = 'No blocks to save';
+    return;
+  }
+  var xml = Blockly.Xml.workspaceToDom(workspace);
+  var xmlText = Blockly.Xml.domToText(xml);
+  if (pywebview_api && pywebview_api.save_script) {
+    pywebview.api.save_script(JSON.stringify(events), xmlText);
+  }
+  document.getElementById('status-left').textContent = 'Saved (' + events.length + ' events)';
+}
+
+function loadScript() {
+  if (pywebview_api && pywebview_api.load_script) {
+    pywebview.api.load_script().then(function(result) {
+      if (result) {
+        var data = JSON.parse(result);
+        if (data.events) {
+          eventsToBlocks(data.events);
+          document.getElementById('status-left').textContent = 'Loaded (' + data.events.length + ' events)';
+        } else if (data.xml) {
+          var xml = Blockly.Xml.textToDom(data.xml);
+          Blockly.Xml.domToWorkspace(xml, workspace);
+          document.getElementById('status-left').textContent = 'Loaded from XML';
+        }
+      }
+    });
+  }
+}
+
+function runScript() {
+  var events = blocksToEvents();
+  if (events.length === 0) {
+    document.getElementById('status-left').textContent = 'No blocks to run';
+    return;
+  }
+  if (pywebview_api && pywebview_api.run_script) {
+    pywebview.api.run_script(JSON.stringify(events));
+  }
+  document.getElementById('status-left').textContent = 'Running...';
+}
+
+function recordScript() {
+  if (pywebview_api && pywebview_api.record_script) {
+    pywebview.api.record_script().then(function(result) {
+      if (result) {
+        var data = JSON.parse(result);
+        if (data.events) {
+          eventsToBlocks(data.events);
+          document.getElementById('status-left').textContent = 'Recorded (' + data.events.length + ' events)';
+        }
+      }
+    });
+  }
+}
+
+function clearWorkspace() {
+  workspace.clear();
+  document.getElementById('status-left').textContent = 'Cleared';
+}
+
+function loadEventsFromPython(eventsJson) {
+  var events = JSON.parse(eventsJson);
+  eventsToBlocks(events);
+  document.getElementById('status-left').textContent = 'Loaded (' + events.length + ' events)';
+}
+
+initBlockly();
+</script>
+</body>
+</html>

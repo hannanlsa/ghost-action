@@ -36,6 +36,7 @@ try:
 except ImportError:
     HAS_CROSS_PLATFORM = False
 
+from log_helpers import log_call, log_step, log_error, log_warn, StepTimer
 logger = logging.getLogger("player")
 
 OCR_REGION_SIZE = 200
@@ -506,7 +507,8 @@ class MacPlayer:
                     "call_script": 0.1,
                 }.get(etype, 0.2)
                 time.sleep(step_delay / self.speed)
-                self._execute_with_retry(event)
+                with StepTimer("PLAYER", f"step_{i}_{etype}"):
+                    self._execute_with_retry(event)
                 i += 1
         except Exception as e:
             logger.error("回放异常: %s", e)
@@ -558,6 +560,7 @@ class MacPlayer:
                     else:
                         logger.warning("步骤 %d 失败, 继续执行", self._event_index)
 
+    @log_call("PLAYER", "_get_target_window_bounds")
     def _get_target_window_bounds(self, event):
         pid = event.get("pid") or self.target_pid
         if not pid:
@@ -575,6 +578,7 @@ class MacPlayer:
             pass
         return None
 
+    @log_call("PLAYER", "_resolve_coords")
     def _resolve_coords(self, event):
         if "x" not in event:
             return 0, 0
@@ -645,6 +649,7 @@ class MacPlayer:
 
         return event["x"], event["y"]
 
+    @log_call("PLAYER", "_yolo_locate")
     def _yolo_locate(self, event):
         try:
             from ui_detector import UIDetector
@@ -678,6 +683,7 @@ class MacPlayer:
             logger.warning("YOLO定位异常: %s", e)
         return None
 
+    @log_call("PLAYER", "_ai_locate")
     def _ai_locate(self, event):
         try:
             import ai_recognizer
@@ -730,10 +736,12 @@ class MacPlayer:
 
         return None
 
+    @log_call("PLAYER", "_post_event")
     def _post_event(self, event_obj, pid=None):
 
         CGEventPost(kCGHIDEventTap, event_obj)
 
+    @log_call("PLAYER", "_press_modifiers")
     def _press_modifiers(self, modifiers):
         if not modifiers:
             return
@@ -743,6 +751,7 @@ class MacPlayer:
                 CGEventPost(kCGHIDEventTap, CGEventCreateKeyboardEvent(None, kc, True))
         time.sleep(0.02)
 
+    @log_call("PLAYER", "_release_modifiers")
     def _release_modifiers(self, modifiers):
         if not modifiers:
             return
@@ -752,8 +761,10 @@ class MacPlayer:
                 CGEventPost(kCGHIDEventTap, CGEventCreateKeyboardEvent(None, kc, False))
         time.sleep(0.02)
 
+    @log_call("PLAYER", "_execute")
     def _execute(self, event):
         etype = event["type"]
+        log_step("PLAYER", etype, f"executing step")
         pid = event.get("pid")
         if self._try_dom_play(event):
             return
@@ -788,6 +799,7 @@ class MacPlayer:
         elif etype == "wait_manual":
             pass
 
+    @log_call("PLAYER", "_try_dom_play")
     def _try_dom_play(self, event):
         if not self._browser_engine or not self._browser_engine.is_connected():
             return False
@@ -818,6 +830,7 @@ class MacPlayer:
             logger.warning("[player] DOM回放异常: %s, 降级", e)
         return False
 
+    @log_call("PLAYER", "_do_mouse_down")
     def _do_mouse_down(self, event, pid=None):
         if pid == os.getpid():
             logger.info("跳过自身窗口点击: PID=%d", pid)
@@ -857,6 +870,7 @@ class MacPlayer:
         event_obj = CGEventCreateMouseEvent(None, etype, CGPoint(x, y), btn)
         self._post_event(event_obj, pid)
 
+    @log_call("PLAYER", "_do_mouse_up")
     def _do_mouse_up(self, event, pid=None):
         x, y = self._resolve_coords(event)
         button = event.get("button", "left")
@@ -874,6 +888,7 @@ class MacPlayer:
         self._post_event(event_obj, pid)
         self._release_modifiers(modifiers)
 
+    @log_call("PLAYER", "_do_mouse_drag")
     def _do_mouse_drag(self, event, pid=None):
         x, y = self._resolve_coords(event)
         button = event.get("button", "left")
@@ -889,6 +904,7 @@ class MacPlayer:
         event_obj = CGEventCreateMouseEvent(None, etype, CGPoint(x, y), btn)
         self._post_event(event_obj, pid)
 
+    @log_call("PLAYER", "_do_scroll")
     def _do_scroll(self, event, pid=None):
         dx, dy = event.get("dx", 0), event.get("dy", 0)
         event_obj = CGEventCreateScrollWheelEvent(
@@ -896,6 +912,7 @@ class MacPlayer:
         )
         self._post_event(event_obj, pid)
 
+    @log_call("PLAYER", "_do_key_down")
     def _do_key_down(self, event, pid=None):
         keycode = event["keycode"]
         text = event.get("text", "")
@@ -907,6 +924,7 @@ class MacPlayer:
         event_obj = CGEventCreateKeyboardEvent(None, keycode, True)
         self._post_event(event_obj, pid)
 
+    @log_call("PLAYER", "_do_key_up")
     def _do_key_up(self, event, pid=None):
         keycode = event["keycode"]
         modifiers = event.get("modifiers", [])
@@ -914,6 +932,7 @@ class MacPlayer:
         self._post_event(event_obj, pid)
         self._release_modifiers(modifiers)
 
+    @log_call("PLAYER", "_do_type_text")
     def _do_type_text(self, event, pid=None):
         text = self._resolve_var(event.get("text", ""))
         if not text:
@@ -929,6 +948,7 @@ class MacPlayer:
         else:
             _paste_text(text)
 
+    @log_call("PLAYER", "_do_wait_for")
     def _do_wait_for(self, event):
         strategy = event.get("strategy", "template")
         timeout = event.get("timeout", 10)
@@ -964,6 +984,7 @@ class MacPlayer:
             time.sleep(interval)
         logger.warning("等待超时: %s (%ds)", strategy, timeout)
 
+    @log_call("PLAYER", "_do_assert")
     def _do_assert(self, event):
         timeout = event.get("timeout", 5)
         start = time.time()
@@ -977,11 +998,13 @@ class MacPlayer:
         if event.get("on_fail", "warn") == "abort":
             self._stop = True
 
+    @log_call("PLAYER", "_do_activate")
     def _do_activate(self, event):
         pid = event.get("pid") or self.target_pid
         if pid:
             _activate_app(pid)
 
+    @log_call("PLAYER", "_check_condition")
     def _check_condition(self, event):
         strategy = event.get("strategy", "template")
         if strategy == "template":
@@ -1028,15 +1051,18 @@ class MacPlayer:
             return False
         return False
 
+    @log_call("PLAYER", "click_at")
     def click_at(self, x, y, button="left", pid=None):
         self._do_mouse_down({"x": x, "y": y, "button": button}, pid)
         time.sleep(0.05)
         self._do_mouse_up({"x": x, "y": y, "button": button}, pid)
 
+    @log_call("PLAYER", "find_text_on_screen")
     def find_text_on_screen(self, target_text, lang="chi_sim+eng"):
         results = ocr_find_text(target_text, lang=lang)
         return results[0][:2] if results else None
 
+    @log_call("PLAYER", "click_text")
     def click_text(self, target_text, lang="chi_sim+eng"):
         pos = self.find_text_on_screen(target_text, lang)
         if pos:
@@ -1044,6 +1070,7 @@ class MacPlayer:
             return True
         return False
 
+    @log_call("PLAYER", "generate_report")
     def generate_report(self, script_name=""):
         ok_count = sum(1 for l in self._execution_log if l.get("status") == "ok")
         fail_count = sum(1 for l in self._execution_log if l.get("status") == "fail")

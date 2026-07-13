@@ -1,6 +1,7 @@
 import logging
 import sys
 
+from log_helpers import log_call, log_step, log_error, StepTimer
 logger = logging.getLogger("cross_platform")
 
 MAC_KEYCODE_TO_CHAR = {
@@ -85,6 +86,7 @@ def detect_platform():
     return "mac" if sys.platform == "darwin" else "win"
 
 
+@log_call("CROSS_PLAT", "mac_keycode_to_vk")
 def mac_keycode_to_vk(keycode):
     vk = MAC_KEYCODE_TO_VK.get(keycode)
     if vk is not None:
@@ -97,6 +99,7 @@ def mac_keycode_to_vk(keycode):
     return None
 
 
+@log_call("CROSS_PLAT", "vk_to_mac_keycode")
 def vk_to_mac_keycode(vk):
     mac_kc = VK_TO_MAC_KEYCODE.get(vk)
     if mac_kc is not None:
@@ -133,6 +136,7 @@ def modifiers_to_platform(unified_mods, target_platform):
     return [mapping.get(m, m) for m in unified_mods]
 
 
+@log_call("CROSS_PLAT", "unify_window_info")
 def unify_window_info(event, source_platform):
     result = dict(event)
     if source_platform == "mac":
@@ -201,6 +205,7 @@ def keycode_to_key_name(keycode, platform):
     return f"Key{keycode}"
 
 
+@log_call("CROSS_PLAT", "adapt_event")
 def adapt_event(event, source_platform, target_platform):
     if source_platform == target_platform:
         return event
@@ -262,6 +267,7 @@ def adapt_event(event, source_platform, target_platform):
     return result
 
 
+@log_call("CROSS_PLAT", "adapt_script_events")
 def adapt_script_events(events, source_platform, target_platform=None):
     if target_platform is None:
         target_platform = detect_platform()
@@ -279,6 +285,7 @@ def adapt_script_events(events, source_platform, target_platform=None):
     return adapted
 
 
+@log_call("CROSS_PLAT", "detect_script_platform")
 def detect_script_platform(events):
     if not events:
         return None

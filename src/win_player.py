@@ -16,6 +16,7 @@ try:
 except ImportError:
     HAS_CROSS_PLATFORM = False
 
+from log_helpers import log_call, log_step, log_error, log_warn, StepTimer
 logger = logging.getLogger("win_player")
 
 user32 = windll.user32
@@ -557,7 +558,8 @@ class WinPlayer:
                     "call_script": 0.1,
                 }.get(etype, 0.2)
                 time.sleep(step_delay / self.speed)
-                self._execute_with_retry(event)
+                with StepTimer("WIN_PLAYER", f"step_{i}_{etype}"):
+                    self._execute_with_retry(event)
                 i += 1
         except Exception as e:
             logger.error("回放异常: %s", e)
@@ -609,8 +611,10 @@ class WinPlayer:
                     else:
                         logger.warning("步骤 %d 失败, 继续执行", self._event_index)
 
+    @log_call("WIN_PLAYER", "_execute")
     def _execute(self, event):
         etype = event.get("type")
+        log_step("WIN_PLAYER", etype, "executing step")
         if etype == "mouse_down":
             self._do_mouse_down(event)
         elif etype == "mouse_up":
@@ -634,6 +638,7 @@ class WinPlayer:
         elif etype in ("set_variable", "call_script", "comment", "ai_recognize", "wait_manual"):
             pass
 
+    @log_call("WIN_PLAYER", "_resolve_coords")
     def _resolve_coords(self, event):
         if "x" not in event:
             return 0, 0
@@ -699,6 +704,7 @@ class WinPlayer:
 
         return event["x"], event["y"]
 
+    @log_call("WIN_PLAYER", "_ai_locate")
     def _ai_locate(self, event):
         try:
             import ai_recognizer
@@ -747,6 +753,7 @@ class WinPlayer:
 
         return None
 
+    @log_call("WIN_PLAYER", "_get_target_window_bounds")
     def _get_target_window_bounds(self, event):
         pid = event.get("pid") or self.target_pid
         if not pid:
@@ -768,6 +775,7 @@ class WinPlayer:
         except Exception:
             return None
 
+    @log_call("WIN_PLAYER", "_do_mouse_down")
     def _do_mouse_down(self, event):
         x, y = self._resolve_coords(event)
         button = event.get("button", "left")
@@ -780,12 +788,14 @@ class WinPlayer:
         time.sleep(0.02)
         _send_input(_make_mouse_input(x, y, flags))
 
+    @log_call("WIN_PLAYER", "_do_mouse_up")
     def _do_mouse_up(self, event):
         x, y = self._resolve_coords(event)
         button = event.get("button", "left")
         flags = {"left": MOUSEEVENTF_LEFTUP, "right": MOUSEEVENTF_RIGHTUP, "middle": MOUSEEVENTF_MIDDLEUP}.get(button, MOUSEEVENTF_LEFTUP)
         _send_input(_make_mouse_input(x, y, flags))
 
+    @log_call("WIN_PLAYER", "_do_mouse_drag")
     def _do_mouse_drag(self, event):
         x, y = self._resolve_coords(event)
         button = event.get("button", "left")
@@ -793,12 +803,14 @@ class WinPlayer:
         user32.SetCursorPos(int(x), int(y))
         _send_input(_make_mouse_input(x, y, flags))
 
+    @log_call("WIN_PLAYER", "_do_scroll")
     def _do_scroll(self, event):
         x, y = event.get("x", 0), event.get("y", 0)
         dy = event.get("dy", 0)
         user32.SetCursorPos(int(x), int(y))
         _send_input(_make_mouse_input(x, y, MOUSEEVENTF_WHEEL, data=dy * 120))
 
+    @log_call("WIN_PLAYER", "_do_key_down")
     def _do_key_down(self, event):
         vk = event.get("keycode", 0)
         text = event.get("text", "")
@@ -813,6 +825,7 @@ class WinPlayer:
         time.sleep(0.02)
         _send_input(_make_key_input(vk))
 
+    @log_call("WIN_PLAYER", "_do_key_up")
     def _do_key_up(self, event):
         vk = event.get("keycode", 0)
         mods = event.get("modifiers", [])
@@ -822,6 +835,7 @@ class WinPlayer:
             if mod_vk:
                 _send_input(_make_key_input(mod_vk, KEYEVENTF_KEYUP))
 
+    @log_call("WIN_PLAYER", "_do_type_text")
     def _do_type_text(self, event):
         text = self._resolve_var(event.get("text", ""))
         if not text:
@@ -834,6 +848,7 @@ class WinPlayer:
         else:
             _paste_text(text)
 
+    @log_call("WIN_PLAYER", "_do_wait_for")
     def _do_wait_for(self, event):
         strategy = event.get("strategy", "template")
         timeout = event.get("timeout", 10)
@@ -866,6 +881,7 @@ class WinPlayer:
             time.sleep(interval)
         logger.warning("等待超时: %s (%ds)", strategy, timeout)
 
+    @log_call("WIN_PLAYER", "_do_assert")
     def _do_assert(self, event):
         timeout = event.get("timeout", 5)
         start = time.time()
@@ -879,11 +895,13 @@ class WinPlayer:
         if event.get("on_fail", "warn") == "abort":
             self._stop = True
 
+    @log_call("WIN_PLAYER", "_do_activate")
     def _do_activate(self, event):
         pid = event.get("pid") or self.target_pid
         if pid:
             _activate_app(pid)
 
+    @log_call("WIN_PLAYER", "_check_condition")
     def _check_condition(self, event):
         strategy = event.get("strategy", "template")
         if strategy == "template":
@@ -923,15 +941,18 @@ class WinPlayer:
             return True
         return False
 
+    @log_call("WIN_PLAYER", "click_at")
     def click_at(self, x, y, button="left"):
         self._do_mouse_down({"x": x, "y": y, "button": button})
         time.sleep(0.05)
         self._do_mouse_up({"x": x, "y": y, "button": button})
 
+    @log_call("WIN_PLAYER", "find_text_on_screen")
     def find_text_on_screen(self, target_text, lang="chi_sim+eng"):
         results = ocr_find_text(target_text, lang=lang)
         return results[0][:2] if results else None
 
+    @log_call("WIN_PLAYER", "click_text")
     def click_text(self, target_text, lang="chi_sim+eng"):
         pos = self.find_text_on_screen(target_text, lang)
         if pos:
@@ -939,6 +960,7 @@ class WinPlayer:
             return True
         return False
 
+    @log_call("WIN_PLAYER", "generate_report")
     def generate_report(self, script_name=""):
         ok_count = sum(1 for l in self._execution_log if l.get("status") == "ok")
         fail_count = sum(1 for l in self._execution_log if l.get("status") == "fail")

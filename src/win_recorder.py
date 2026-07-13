@@ -10,6 +10,7 @@ from ctypes import windll, Structure, POINTER, byref, sizeof, c_long, c_ulong, c
 if not hasattr(ctypes.wintypes, 'ULONG_PTR'):
     ctypes.wintypes.ULONG_PTR = c_uint64
 
+from log_helpers import log_call, log_step, log_error, log_warn, log_sync, StepTimer
 logger = logging.getLogger("win_recorder")
 
 OCR_REGION_SIZE = 200
@@ -109,6 +110,7 @@ class KBDLLHOOKSTRUCT(Structure):
 HOOKPROC = ctypes.CFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.wintypes.WPARAM, ctypes.wintypes.LPARAM)
 
 
+@log_call("WIN_REC", "get_window_at_point")
 def get_window_at_point(x, y):
     hwnd = user32.WindowFromPoint(ctypes.wintypes.POINT(x, y))
     if not hwnd:
@@ -128,6 +130,7 @@ def get_window_at_point(x, y):
     return pid.value, title, cls, bounds
 
 
+@log_call("WIN_REC", "get_visible_windows")
 def get_visible_windows():
     windows = []
     seen = set()
@@ -165,6 +168,7 @@ def get_visible_windows():
     return windows
 
 
+@log_call("WIN_REC", "ocr_at_point")
 def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
     try:
         import mss
@@ -200,6 +204,7 @@ def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
         return []
 
 
+@log_call("WIN_REC", "capture_template")
 def capture_template(x, y, size=TEMPLATE_SIZE, save_dir=None, index=0):
     try:
         import mss
@@ -250,6 +255,7 @@ class WinRecorder:
         os.makedirs(screenshot_dir, exist_ok=True)
 
     def start(self):
+        logger.info("Windows录制开始, pid=%d", self._my_pid)
         self.events = []
         self.start_time = time.time()
         self.recording = True
@@ -266,6 +272,7 @@ class WinRecorder:
         self._hook_thread.start()
 
     def stop(self):
+        logger.info("Windows录制停止, %d事件", len(self.events))
         self.recording = False
         self._stop_requested = True
         self._unhook()
@@ -336,6 +343,7 @@ class WinRecorder:
 
         self._unhook()
 
+    @log_call("WIN_REC", "_get_modifiers")
     def _get_modifiers(self):
         mods = []
         if user32.GetAsyncKeyState(0x10) & 0x8000:
@@ -346,6 +354,7 @@ class WinRecorder:
             mods.append("alt")
         return mods
 
+    @log_call("WIN_REC", "_get_window_info")
     def _get_window_info(self, x, y):
         pid, title, cls, bounds = get_window_at_point(x, y)
         return {
@@ -354,7 +363,9 @@ class WinRecorder:
             "window_bounds": bounds if bounds else {},
         }
 
+    @log_call("WIN_REC", "_on_mouse_down")
     def _on_mouse_down(self, x, y, button, t):
+        log_step("WIN_REC", "MOUSE_DOWN", f"x={x} y={y} btn={button}")
         win = self._get_window_info(x, y)
         ev = {"type": "mouse_down", "x": x, "y": y, "button": button, "time": t}
         ev.update(win)
@@ -375,12 +386,14 @@ class WinRecorder:
         self._drag_last_y = y
         self._maybe_screenshot(t)
 
+    @log_call("WIN_REC", "_on_mouse_up")
     def _on_mouse_up(self, x, y, button, t):
         ev = {"type": "mouse_up", "x": x, "y": y, "button": button, "time": t}
         self.events.append(ev)
         self._dragging = False
         self._drag_button = None
 
+    @log_call("WIN_REC", "_on_drag")
     def _on_drag(self, x, y, t):
         if abs(x - self._drag_last_x) < 5 and abs(y - self._drag_last_y) < 5:
             return
@@ -390,14 +403,18 @@ class WinRecorder:
         self._drag_last_x = x
         self._drag_last_y = y
 
+    @log_call("WIN_REC", "_on_scroll")
     def _on_scroll(self, x, y, delta, t):
+        log_step("WIN_REC", "SCROLL", f"x={x} y={y} delta={delta}")
         win = self._get_window_info(x, y)
         ev = {"type": "scroll", "x": x, "y": y, "dx": 0, "dy": delta, "time": t}
         ev.update(win)
         ev["intent"] = _infer_intent(ev) or "滚动"
         self.events.append(ev)
 
+    @log_call("WIN_REC", "_on_key_down")
     def _on_key_down(self, vk, mods, t):
+        log_step("WIN_REC", "KEY_DOWN", f"vk=0x{vk:02X} mods={mods}")
         text = ""
         if not mods and 0x20 <= vk <= 0x5A:
             text = chr(vk).lower()
@@ -411,14 +428,17 @@ class WinRecorder:
             ev["intent"] = intent
         self.events.append(ev)
 
+    @log_call("WIN_REC", "_on_key_up")
     def _on_key_up(self, vk, mods, t):
         ev = {"type": "key_up", "keycode": vk, "modifiers": mods, "time": t, "platform": "win"}
         self.events.append(ev)
 
+    @log_call("WIN_REC", "_maybe_screenshot")
     def _maybe_screenshot(self, t):
         if t - self.last_screenshot_time >= self.screenshot_interval:
             self._take_screenshot(t)
 
+    @log_call("WIN_REC", "_take_screenshot")
     def _take_screenshot(self, t):
         try:
             import mss
@@ -435,6 +455,7 @@ class WinRecorder:
         except Exception as e:
             logger.warning("截图失败: %s", e)
 
+    @log_call("WIN_REC", "_process_ocr_queue")
     def _process_ocr_queue(self):
         if not self.ocr_anchors:
             return

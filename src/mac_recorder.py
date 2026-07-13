@@ -37,6 +37,7 @@ try:
 except ImportError:
     HAS_CROSS_PLATFORM = False
 
+from log_helpers import log_call, log_step, log_error, log_warn, log_sync, StepTimer
 logger = logging.getLogger("recorder")
 
 OCR_REGION_SIZE = 200
@@ -168,6 +169,7 @@ MODIFIER_FLAGS = {
 }
 
 
+@log_call("RECORDER", "get_window_bounds_at_point")
 def get_window_bounds_at_point(x, y):
     try:
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
@@ -199,6 +201,7 @@ def get_window_bounds_at_point(x, y):
     return None
 
 
+@log_call("RECORDER", "get_window_bounds_by_pid")
 def get_window_bounds_by_pid(pid):
     try:
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
@@ -233,6 +236,7 @@ def get_window_bounds_by_pid(pid):
     return None
 
 
+@log_call("RECORDER", "get_pid_at_point")
 def get_pid_at_point(x, y):
     try:
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
@@ -261,6 +265,7 @@ def get_pid_at_point(x, y):
     return None
 
 
+@log_call("RECORDER", "get_window_name_at_point")
 def get_window_name_at_point(x, y):
     try:
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
@@ -282,6 +287,7 @@ def get_window_name_at_point(x, y):
     return '', ''
 
 
+@log_call("RECORDER", "get_visible_windows")
 def get_visible_windows():
     try:
         window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
@@ -310,6 +316,7 @@ def get_visible_windows():
         return []
 
 
+@log_call("RECORDER", "ocr_at_point")
 def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
     try:
         half = region_size // 2
@@ -343,6 +350,7 @@ def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
         return []
 
 
+@log_call("RECORDER", "capture_template")
 def capture_template(x, y, size=TEMPLATE_SIZE, save_dir=None, index=0):
     try:
         half = size // 2
@@ -466,6 +474,7 @@ class MacRecorder:
     def _elapsed(self):
         return time.time() - self.start_time
 
+    @log_call("RECORDER", "_autosave")
     def _autosave(self):
         try:
             import json
@@ -475,6 +484,7 @@ class MacRecorder:
         except Exception:
             pass
 
+    @log_call("RECORDER", "_get_pid_cached")
     def _get_pid_cached(self, x, y):
         now = time.time()
         if self._last_pid is not None and now - self._last_pid_time < 0.1:
@@ -484,6 +494,7 @@ class MacRecorder:
         self._last_pid_time = now
         return pid
 
+    @log_call("RECORDER", "_take_screenshot")
     def _take_screenshot(self):
         now = time.time()
         if now - self.last_screenshot_time < self.screenshot_interval:
@@ -526,6 +537,7 @@ class MacRecorder:
         except Exception as e:
             logger.debug("截图异常: %s", e)
 
+    @log_call("RECORDER", "_process_ocr_queue")
     def _process_ocr_queue(self):
         if not self.ocr_anchors or not self._ocr_queue:
             return
@@ -547,6 +559,7 @@ class MacRecorder:
     def _callback(self, proxy, event_type, event, refcon):
         if not self.recording or self._stop_requested:
             return event
+        log_sync("RECORDER", "RAW_EVENT", f"type={event_type}")
         try:
             loc = CGEventGetLocation(event)
             x = float(loc.x)
@@ -581,8 +594,10 @@ class MacRecorder:
                 self._autosave()
                 self._autosave_count = 0
 
+    @log_call("RECORDER", "_handle_event")
     def _handle_event(self, event_type, x, y, flags, keycode, dx, dy):
         elapsed = self._elapsed()
+        log_step("RECORDER", "HANDLE_EVENT", f"type={event_type} x={x:.0f} y={y:.0f}")
         modifiers = []
         if flags & kCGEventFlagMaskCommand:
             modifiers.append("cmd")
