@@ -405,14 +405,14 @@ class WinRecorder:
             text = "-"
         key_name = VK_MAP.get(vk, f"Key{vk}")
 
-        ev = {"type": "key_down", "keycode": vk, "text": text, "modifiers": mods, "time": t, "key_name": key_name}
+        ev = {"type": "key_down", "keycode": vk, "text": text, "modifiers": mods, "time": t, "key_name": key_name, "platform": "win"}
         intent = _infer_intent(ev)
         if intent:
             ev["intent"] = intent
         self.events.append(ev)
 
     def _on_key_up(self, vk, mods, t):
-        ev = {"type": "key_up", "keycode": vk, "modifiers": mods, "time": t}
+        ev = {"type": "key_up", "keycode": vk, "modifiers": mods, "time": t, "platform": "win"}
         self.events.append(ev)
 
     def _maybe_screenshot(self, t):

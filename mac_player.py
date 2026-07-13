@@ -30,6 +30,12 @@ try:
 except ImportError:
     HAS_ACCESSIBILITY = False
 
+try:
+    from cross_platform import detect_script_platform, adapt_script_events
+    HAS_CROSS_PLATFORM = True
+except ImportError:
+    HAS_CROSS_PLATFORM = False
+
 logger = logging.getLogger("player")
 
 OCR_REGION_SIZE = 200
@@ -272,6 +278,11 @@ class MacPlayer:
         self._stop = False
         self._paused.set()
         self._event_index = 0
+        if not _recursive and HAS_CROSS_PLATFORM:
+            src_platform = detect_script_platform(events)
+            if src_platform and src_platform != "mac":
+                logger.info("检测到%s脚本, 自动适配为Mac格式", src_platform)
+                events = adapt_script_events(events, src_platform, "mac")
         self._total_events = len(events)
         self._start_wall_time = time.time() if not _recursive else (self._start_wall_time or time.time())
         if not _recursive:
@@ -535,7 +546,8 @@ class MacPlayer:
                             if self._adaptive.execute_alternative(
                                     alt_type, alt_data,
                                     browser_engine=self._browser_engine,
-                                    browser_profile=self._browser_profile):
+                                    browser_profile=self._browser_profile,
+                                    pid=event.get("pid") or self.target_pid):
                                 self._execution_log.append({"step": self._event_index, "type": etype, "status": "ok", "attempt": attempt, "alternative": alt_type})
                                 return
                     self._execution_log.append({"step": self._event_index, "type": etype, "status": "fail", "error": str(e)})
@@ -570,7 +582,7 @@ class MacPlayer:
         win_bounds = self._get_target_window_bounds(event)
 
         if self.smart_replay and self._adaptive and win_bounds:
-            recorded_bounds = event.get("window_bounds")
+            recorded_bounds = event.get("window_bounds") or event.get("window")
             if recorded_bounds:
                 adapted_x, adapted_y = self._adaptive.adapt_coordinates(
                     event["x"], event["y"], recorded_bounds, win_bounds)

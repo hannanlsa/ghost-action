@@ -31,6 +31,12 @@ try:
 except ImportError:
     HAS_ACCESSIBILITY = False
 
+try:
+    from cross_platform import keycode_to_key_name
+    HAS_CROSS_PLATFORM = True
+except ImportError:
+    HAS_CROSS_PLATFORM = False
+
 logger = logging.getLogger("recorder")
 
 OCR_REGION_SIZE = 200
@@ -747,12 +753,14 @@ class MacRecorder:
             unicode_char = _get_unicode_from_event_raw(keycode, flags)
             ev = {
                 "type": "key_down", "keycode": keycode,
-                "time": elapsed, "pid": pid,
+                "time": elapsed, "pid": pid, "platform": "mac",
             }
             if modifiers:
                 ev["modifiers"] = modifiers
             if unicode_char:
                 ev["text"] = unicode_char
+            if HAS_CROSS_PLATFORM:
+                ev["key_name"] = keycode_to_key_name(keycode, "mac")
             intent = _infer_intent(ev)
             if intent:
                 ev["intent"] = intent
@@ -762,7 +770,7 @@ class MacRecorder:
             keycode_val = keycode
             ev = {
                 "type": "key_up", "keycode": keycode_val,
-                "time": elapsed, "pid": pid,
+                "time": elapsed, "pid": pid, "platform": "mac",
             }
             if modifiers:
                 ev["modifiers"] = modifiers

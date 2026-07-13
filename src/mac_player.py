@@ -30,6 +30,12 @@ try:
 except ImportError:
     HAS_ACCESSIBILITY = False
 
+try:
+    from cross_platform import detect_script_platform, adapt_script_events
+    HAS_CROSS_PLATFORM = True
+except ImportError:
+    HAS_CROSS_PLATFORM = False
+
 logger = logging.getLogger("player")
 
 OCR_REGION_SIZE = 200
@@ -272,6 +278,11 @@ class MacPlayer:
         self._stop = False
         self._paused.set()
         self._event_index = 0
+        if not _recursive and HAS_CROSS_PLATFORM:
+            src_platform = detect_script_platform(events)
+            if src_platform and src_platform != "mac":
+                logger.info("检测到%s脚本, 自动适配为Mac格式", src_platform)
+                events = adapt_script_events(events, src_platform, "mac")
         self._total_events = len(events)
         self._start_wall_time = time.time() if not _recursive else (self._start_wall_time or time.time())
         if not _recursive:
