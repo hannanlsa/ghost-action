@@ -56,6 +56,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 .node-type-cond .drawflow_content_node{border-left:3px solid #9c27b0}
 .node-type-loop .drawflow_content_node{border-left:3px solid #ff5722}
 .node-type-other .drawflow_content_node{border-left:3px solid #607d8b}
+.node-ocr-badge{font-size:10px;color:#4caf50;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node-unreliable-badge{font-size:10px;color:#ff5252;margin-top:2px;font-weight:600}
 
 .drawflow .connection .main-path{stroke:#0f3460;stroke-width:2}
 .drawflow .connection .main-path:hover{stroke:#e94560}
@@ -85,13 +87,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 <div id="minimap"><canvas id="minimap-canvas"></canvas><div id="minimap-viewport"></div></div>
 <div id="statusbar">
   <span id="status-left">就绪 | 滚轮缩放 | 拖拽平移</span>
-  <span id="status-right">v2.2.15</span>
+  <span id="status-right">v2.2.16</span>
 </div>
 <div class="context-menu" id="ctx-menu">
   <div onclick="ctxDisable()">禁用此步</div>
   <div onclick="ctxEnable()">启用此步</div>
   <div onclick="ctxDelete()">删除此步</div>
   <div onclick="ctxComment()">添加注释</div>
+  <div onclick="ctxEditOcr()">编辑OCR文字</div>
+  <div onclick="ctxDelAnchor()">删除锚点</div>
+  <div onclick="ctxMarkUnreliable()">标记不可靠</div>
 </div>
 
 <script>
@@ -488,6 +493,50 @@ function ctxComment(){
   else{var d=document.createElement('div');d.className='node-comment';d.textContent='// '+text;card.appendChild(d);}
   if(allEvents[ctxNodeId])allEvents[ctxNodeId]._comment=text;
   document.getElementById('status-left').textContent='已添加注释';
+}
+
+function ctxEditOcr(){
+  if(!ctxNodeId)return;
+  var ev=allEvents[ctxNodeId];
+  if(!ev)return;
+  var cur=ev.ocr_anchor||ev.ocr_text||'';
+  var text=prompt('编辑OCR锚点文字:',cur);
+  if(text===null)return;
+  ev.ocr_anchor=text;
+  ev.ocr_text=text;
+  var card=document.querySelector('#node-'+ctxNodeId+' .node-card');
+  if(card){
+    var badge=card.querySelector('.node-ocr-badge');
+    if(!badge&&text){badge=document.createElement('div');badge.className='node-ocr-badge';card.appendChild(badge);}
+    if(badge){badge.textContent=text?'OCR: '+text:'';}
+  }
+  document.getElementById('status-left').textContent=text?'已设置OCR锚点':'已清空OCR锚点';
+}
+
+function ctxDelAnchor(){
+  if(!ctxNodeId)return;
+  var ev=allEvents[ctxNodeId];
+  if(!ev)return;
+  delete ev.ocr_anchor;
+  delete ev.ocr_text;
+  var card=document.querySelector('#node-'+ctxNodeId+' .node-card');
+  if(card){var badge=card.querySelector('.node-ocr-badge');if(badge)badge.remove();}
+  document.getElementById('status-left').textContent='已删除锚点';
+}
+
+function ctxMarkUnreliable(){
+  if(!ctxNodeId)return;
+  var ev=allEvents[ctxNodeId];
+  if(!ev)return;
+  ev._unreliable=!ev._unreliable;
+  var card=document.querySelector('#node-'+ctxNodeId+' .node-card');
+  if(card){
+    var badge=card.querySelector('.node-unreliable-badge');
+    if(ev._unreliable){
+      if(!badge){badge=document.createElement('div');badge.className='node-unreliable-badge';badge.textContent='不可靠';card.appendChild(badge);}
+    }else{if(badge)badge.remove();}
+  }
+  document.getElementById('status-left').textContent=ev._unreliable?'已标记不可靠':'已取消不可靠';
 }
 
 function loadInitialEvents(){

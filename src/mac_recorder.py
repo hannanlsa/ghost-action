@@ -41,7 +41,7 @@ from log_helpers import log_call, log_step, log_error, log_warn, log_sync, StepT
 logger = logging.getLogger("recorder")
 
 OCR_REGION_SIZE = 200
-TEMPLATE_SIZE = 80
+TEMPLATE_SIZE = 200
 DRAG_SAMPLE_MIN_DIST = 5
 
 
@@ -369,7 +369,8 @@ def capture_template(x, y, size=TEMPLATE_SIZE, save_dir=None, index=0):
             img.save(os.path.join(save_dir, fname))
             return fname
         return None
-    except Exception:
+    except Exception as e:
+        log_error("RECORDER", "CAPTURE_TEMPLATE_FAIL", f"x={x} y={y} error={e}")
         return None
 
 
@@ -634,13 +635,12 @@ class MacRecorder:
                     owner = wb.get("owner", "").lower()
                     if any(b in owner for b in ["chrome", "chromium", "edge", "firefox", "safari", "brave"]):
                         ev["is_browser"] = True
-            if modifiers:
-                ev["modifiers"] = modifiers
-            if self.visual_templates:
-                tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count)
-                if tpl_file:
-                    ev["template"] = tpl_file
-                    self._template_count += 1
+             if modifiers:
+                 ev["modifiers"] = modifiers
+            tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count)
+            if tpl_file:
+                ev["template"] = tpl_file
+                self._template_count += 1
             if HAS_ACCESSIBILITY and pid:
                 try:
                     elem = get_element_at_point(pid, x, y)
@@ -693,13 +693,12 @@ class MacRecorder:
                 "type": "mouse_down", "x": x, "y": y,
                 "button": "right", "time": elapsed, "pid": pid,
             }
-            if modifiers:
-                ev["modifiers"] = modifiers
-            if self.visual_templates:
-                tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count)
-                if tpl_file:
-                    ev["template"] = tpl_file
-                    self._template_count += 1
+             if modifiers:
+                 ev["modifiers"] = modifiers
+            tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count)
+            if tpl_file:
+                ev["template"] = tpl_file
+                self._template_count += 1
             if HAS_ACCESSIBILITY and pid:
                 try:
                     elem = get_element_at_point(pid, x, y)
