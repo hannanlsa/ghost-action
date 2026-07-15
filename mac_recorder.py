@@ -18,7 +18,8 @@ from Quartz import (
     CFMachPortCreateRunLoopSource, CFRunLoopGetCurrent, CFRunLoopAddSource,
     kCFRunLoopDefaultMode, CFRunLoopStop,
     CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly,
-    kCGNullWindowID,
+    kCGNullWindowID, CGWindowListCreateImage, kCGWindowImageDefault,
+    CGRectMake, CGRectNull,
 )
 from Foundation import NSRunLoop, NSDate
 import mss
@@ -37,11 +38,23 @@ try:
 except ImportError:
     HAS_CROSS_PLATFORM = False
 
+try:
+    from hyocr_bridge import recognize as hyocr_recognize, is_available as hyocr_available
+    HAS_HYOCR = True
+except ImportError:
+    HAS_HYOCR = False
+
+try:
+    from window_filters import is_whitelisted, is_blacklisted, get_filter_type
+    HAS_WINDOW_FILTERS = True
+except ImportError:
+    HAS_WINDOW_FILTERS = False
+
 from log_helpers import log_call, log_step, log_error, log_warn, log_sync, StepTimer
 logger = logging.getLogger("recorder")
 
 OCR_REGION_SIZE = 200
-TEMPLATE_SIZE = 80
+TEMPLATE_SIZE = 200
 DRAG_SAMPLE_MIN_DIST = 5
 
 
@@ -186,12 +199,14 @@ def get_window_bounds_at_point(x, y):
             pid = w.get('kCGWindowOwnerPID', -1)
             owner = w.get('kCGWindowOwnerName', '')
             title = w.get('kCGWindowName', '')
+            win_id = w.get('kCGWindowNumber', 0)
             if layer != 0 or ww * wh < 100 or pid < 0:
                 continue
             if wx <= x <= wx + ww and wy <= y <= wy + wh:
                 candidates.append((layer, ww * wh, {
                     "pid": pid, "owner": owner, "title": title,
                     "x": wx, "y": wy, "width": ww, "height": wh,
+                    "window_id": win_id,
                 }))
         if candidates:
             candidates.sort(key=lambda c: (c[0], c[1]))
@@ -317,17 +332,33 @@ def get_visible_windows():
 
 
 @log_call("RECORDER", "ocr_at_point")
-def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
+def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng", use_hyocr=True, window_id=None):
+    results = _ocr_tesseract(x, y, region_size, lang, window_id=window_id)
+    if results:
+        return results
+    if use_hyocr and HAS_HYOCR and hyocr_available():
+        logger.info("[RECORDER] OCR_FALLBACK tesseract=0 trying hyocr x=%d y=%d", x, y)
+        results = hyocr_recognize(x, y, region_size)
+        if results:
+            return results
+    return []
+
+
+def _ocr_tesseract(x, y, region_size, lang, window_id=None):
     try:
-        half = region_size // 2
-        region = {
-            "left": max(0, int(x) - half),
-            "top": max(0, int(y) - half),
-            "width": region_size,
-            "height": region_size,
-        }
-        with mss.MSS() as sct:
-            screenshot = sct.grab(region)
+        img = None
+        if window_id and window_id > 0:
+            img = capture_window_region(window_id, x, y, region_size)
+        if img is None:
+            half = region_size // 2
+            region = {
+                "left": max(0, int(x) - half),
+                "top": max(0, int(y) - half),
+                "width": region_size,
+                "height": region_size,
+            }
+            with mss.MSS() as sct:
+                screenshot = sct.grab(region)
             img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
         data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
         results = []
@@ -336,40 +367,82 @@ def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
                 continue
             tx = data["left"][i] + data["width"][i] // 2
             ty = data["top"][i] + data["height"][i] // 2
-            abs_x = region["left"] + tx
-            abs_y = region["top"] + ty
+            abs_x = int(x) - region_size // 2 + tx
+            abs_y = int(y) - region_size // 2 + ty
             results.append({
                 "text": text.strip(),
                 "x": abs_x,
                 "y": abs_y,
-                "offset_x": abs_x - x,
-                "offset_y": abs_y - y,
+                "offset_x": abs_x - int(x),
+                "offset_y": abs_y - int(y),
             })
         return results
     except Exception:
         return []
 
 
-@log_call("RECORDER", "capture_template")
-def capture_template(x, y, size=TEMPLATE_SIZE, save_dir=None, index=0):
+@log_call("RECORDER", "capture_window_region")
+def capture_window_region(window_id, x, y, region_size=200):
     try:
-        half = size // 2
-        region = {
-            "left": max(0, int(x) - half),
-            "top": max(0, int(y) - half),
-            "width": size,
-            "height": size,
-        }
-        with mss.MSS() as sct:
-            screenshot = sct.grab(region)
-            img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+        half = region_size // 2
+        rect = CGRectMake(
+            max(0, x - half),
+            max(0, y - half),
+            region_size,
+            region_size,
+        )
+        cg_image = CGWindowListCreateImage(
+            rect,
+            kCGWindowListOptionOnScreenOnly,
+            window_id,
+            kCGWindowImageDefault,
+        )
+        if cg_image is None:
+            return None
+        from Quartz import CGImageGetWidth, CGImageGetHeight, CGImageGetBytesPerRow, CGImageGetDataProvider
+        w = int(CGImageGetWidth(cg_image))
+        h = int(CGImageGetHeight(cg_image))
+        if not w or not h or w <= 0 or h <= 0:
+            return None
+        bpr = int(CGImageGetBytesPerRow(cg_image))
+        data = CGImageGetDataProvider(cg_image)
+        from Quartz import CGDataProviderCopyData
+        raw = CGDataProviderCopyData(data)
+        if not raw:
+            return None
+        img = Image.frombytes("RGBA", (w, h), bytes(raw), "raw", "RGBA", bpr)
+        img = img.convert("RGB")
+        return img
+    except Exception as e:
+        log_error("RECORDER", "CAPTURE_WINDOW_REGION_FAIL", f"wid={window_id} x={x} y={y} error={e}")
+        return None
+
+
+@log_call("RECORDER", "capture_template")
+def capture_template(x, y, size=TEMPLATE_SIZE, save_dir=None, index=0, window_id=None):
+    try:
+        img = None
+        if window_id and window_id > 0:
+            img = capture_window_region(window_id, x, y, size)
+        if img is None:
+            half = size // 2
+            region = {
+                "left": max(0, int(x) - half),
+                "top": max(0, int(y) - half),
+                "width": size,
+                "height": size,
+            }
+            with mss.MSS() as sct:
+                screenshot = sct.grab(region)
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
             fname = f"tpl_{index:04d}.png"
             img.save(os.path.join(save_dir, fname))
             return fname
         return None
-    except Exception:
+    except Exception as e:
+        log_error("RECORDER", "CAPTURE_TEMPLATE_FAIL", f"x={x} y={y} error={e}")
         return None
 
 
@@ -414,6 +487,7 @@ class MacRecorder:
         self._my_pid = os.getpid()
         self._target_pid = None
         self._browser_engine = browser_engine
+        self._whitelist_window_id = 0
         os.makedirs(screenshot_dir, exist_ok=True)
 
     def start(self):
@@ -428,6 +502,7 @@ class MacRecorder:
         self._template_count = 0
         self._dragging = False
         self._drag_button = None
+        self._whitelist_window_id = 0
         self._raw_queue = queue.Queue()
         logger.info("录制初始化, pid=%d, screenshot_dir=%s", self._my_pid, self.screenshot_dir)
 
@@ -544,7 +619,9 @@ class MacRecorder:
         total = len(self._ocr_queue)
         for i, (idx, x, y) in enumerate(self._ocr_queue):
             if idx < len(self.events):
-                results = ocr_at_point(x, y)
+                ev = self.events[idx]
+                wid = ev.get("window", {}).get("window_id", 0) if isinstance(ev.get("window"), dict) else 0
+                results = ocr_at_point(x, y, window_id=wid if wid and wid > 0 else None)
                 if results:
                     closest = min(results, key=lambda r: abs(r["offset_x"]) + abs(r["offset_y"]))
                     self.events[idx]["ocr_anchor"] = {
@@ -614,6 +691,17 @@ class MacRecorder:
                 self._target_pid = pid
             if pid == self._my_pid:
                 return
+            if HAS_WINDOW_FILTERS and pid:
+                wb = get_window_bounds_at_point(x, y)
+                owner = wb.get("owner", "") if wb else ""
+                title = wb.get("title", "") if wb else ""
+                ft = get_filter_type(owner, title)
+                if ft == "blacklist":
+                    return
+                if ft == "whitelist":
+                    self._whitelist_window_id = wb.get("window_id", 0) if wb else 0
+                else:
+                    self._whitelist_window_id = 0
 
         if event_type == kCGEventLeftMouseDown:
             self._dragging = True
@@ -621,6 +709,7 @@ class MacRecorder:
             self._drag_last_x = x
             self._drag_last_y = y
             pid = self._get_pid_cached(x, y)
+            wid = self._whitelist_window_id
             self._take_screenshot()
             idx = len(self.events)
             ev = {
@@ -634,13 +723,13 @@ class MacRecorder:
                     owner = wb.get("owner", "").lower()
                     if any(b in owner for b in ["chrome", "chromium", "edge", "firefox", "safari", "brave"]):
                         ev["is_browser"] = True
+                    wid = wb.get("window_id", wid)
             if modifiers:
                 ev["modifiers"] = modifiers
-            if self.visual_templates:
-                tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count)
-                if tpl_file:
-                    ev["template"] = tpl_file
-                    self._template_count += 1
+            tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count, window_id=wid if wid and wid > 0 else None)
+            if tpl_file:
+                ev["template"] = tpl_file
+                self._template_count += 1
             if HAS_ACCESSIBILITY and pid:
                 try:
                     elem = get_element_at_point(pid, x, y)
@@ -687,6 +776,7 @@ class MacRecorder:
             self._drag_last_x = x
             self._drag_last_y = y
             pid = self._get_pid_cached(x, y)
+            wid = self._whitelist_window_id
             self._take_screenshot()
             idx = len(self.events)
             ev = {
@@ -695,11 +785,10 @@ class MacRecorder:
             }
             if modifiers:
                 ev["modifiers"] = modifiers
-            if self.visual_templates:
-                tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count)
-                if tpl_file:
-                    ev["template"] = tpl_file
-                    self._template_count += 1
+            tpl_file = capture_template(x, y, save_dir=self._template_dir, index=self._template_count, window_id=wid if wid and wid > 0 else None)
+            if tpl_file:
+                ev["template"] = tpl_file
+                self._template_count += 1
             if HAS_ACCESSIBILITY and pid:
                 try:
                     elem = get_element_at_point(pid, x, y)

@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+screenshots/
+logs/
+templates/
+node_modules/
+dist/
+build/
+*.egg-info/
+*.spec
+chromium_tmp/
+*.bak
+_recording_autosave.json
+visual_editor_html/thumbs/

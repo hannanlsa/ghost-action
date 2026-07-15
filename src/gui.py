@@ -373,7 +373,7 @@ class AutoRepeatApp:
         ttk.Button(intent_btn_row, text="保存文本", command=self._save_intent_text, width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(intent_btn_row, text="弹出编辑", command=self._popup_intent_editor, width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(intent_btn_row, text="按窗口拆分", command=self._split_by_window, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(intent_btn_row, text="窗口黑名单", command=self._edit_window_blacklist, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intent_btn_row, text="窗口过滤", command=self._edit_window_filters, width=10).pack(side=tk.LEFT, padx=2)
         self.intent_text = tk.Text(intent_frame, height=3, wrap=tk.WORD, font=("", 10))
         self.intent_text.pack(fill=tk.X, pady=(2, 0))
         self.intent_var = tk.StringVar(value="")

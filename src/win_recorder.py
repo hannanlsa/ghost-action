@@ -13,6 +13,18 @@ if not hasattr(ctypes.wintypes, 'ULONG_PTR'):
 from log_helpers import log_call, log_step, log_error, log_warn, log_sync, StepTimer
 logger = logging.getLogger("win_recorder")
 
+try:
+    from window_filters import is_whitelisted, is_blacklisted, get_filter_type
+    HAS_WINDOW_FILTERS = True
+except ImportError:
+    HAS_WINDOW_FILTERS = False
+
+try:
+    from hyocr_bridge import recognize as hyocr_recognize, is_available as hyocr_available
+    HAS_HYOCR = True
+except ImportError:
+    HAS_HYOCR = False
+
 OCR_REGION_SIZE = 200
 TEMPLATE_SIZE = 80
 
@@ -114,7 +126,7 @@ HOOKPROC = ctypes.CFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.wintypes.WPARAM,
 def get_window_at_point(x, y):
     hwnd = user32.WindowFromPoint(ctypes.wintypes.POINT(x, y))
     if not hwnd:
-        return None, "", "", {}
+        return None, "", "", {}, 0
     pid = ctypes.wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, byref(pid))
     length = 256
@@ -127,7 +139,7 @@ def get_window_at_point(x, y):
     rect = ctypes.wintypes.RECT()
     user32.GetWindowRect(hwnd, byref(rect))
     bounds = {"x": rect.left, "y": rect.top, "width": rect.right - rect.left, "height": rect.bottom - rect.top}
-    return pid.value, title, cls, bounds
+    return pid.value, title, cls, bounds, hwnd
 
 
 @log_call("WIN_REC", "get_visible_windows")
@@ -168,22 +180,90 @@ def get_visible_windows():
     return windows
 
 
-@log_call("WIN_REC", "ocr_at_point")
-def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
+PW_RENDERFULLCONTENT = 0x00000002
+
+
+@log_call("WIN_REC", "capture_window_region")
+def capture_window_region(hwnd, x, y, region_size=200):
+    try:
+        from PIL import Image
+        rect = ctypes.wintypes.RECT()
+        user32.GetWindowRect(hwnd, byref(rect))
+        win_w = rect.right - rect.left
+        win_h = rect.bottom - rect.top
+        if win_w <= 0 or win_h <= 0:
+            return None
+
+        hwnd_dc = user32.GetWindowDC(hwnd)
+        if not hwnd_dc:
+            return None
+        try:
+            compat_dc = windll.gdi32.CreateCompatibleDC(hwnd_dc)
+            bitmap = windll.gdi32.CreateCompatibleBitmap(hwnd_dc, win_w, win_h)
+            windll.gdi32.SelectObject(compat_dc, bitmap)
+            result = user32.PrintWindow(hwnd, compat_dc, PW_RENDERFULLCONTENT)
+            if not result:
+                windll.gdi32.BitBlt(compat_dc, 0, 0, win_w, win_h, hwnd_dc, 0, 0, 0x00CC0020)
+            bmi = ctypes.create_string_buffer(40)
+            ctypes.memset(bmi, 0, 40)
+            ctypes.cast(bmi, POINTER(ctypes.c_uint32))[0] = 40
+            ctypes.cast(bmi, POINTER(ctypes.c_int32))[1] = win_w
+            ctypes.cast(bmi, POINTER(ctypes.c_int32))[2] = -win_h
+            ctypes.cast(bmi, POINTER(ctypes.c_uint16))[12] = 1
+            ctypes.cast(bmi, POINTER(ctypes.c_uint16))[13] = 32
+            buf_size = win_w * win_h * 4
+            buf = ctypes.create_string_buffer(buf_size)
+            windll.gdi32.GetDIBits(compat_dc, bitmap, 0, win_h, buf, bmi, 0)
+            img = Image.frombytes("RGBA", (win_w, win_h), buf.raw, "raw", "BGRA")
+            img = img.convert("RGB")
+            rel_x = x - rect.left
+            rel_y = y - rect.top
+            half = region_size // 2
+            left = max(0, rel_x - half)
+            top = max(0, rel_y - half)
+            right = min(win_w, rel_x + half)
+            bottom = min(win_h, rel_y + half)
+            if right > left and bottom > top:
+                img = img.crop((left, top, right, bottom))
+            return img
+        finally:
+            windll.gdi32.DeleteObject(bitmap)
+            windll.gdi32.DeleteDC(compat_dc)
+            user32.ReleaseDC(hwnd, hwnd_dc)
+    except Exception as e:
+        log_error("WIN_REC", "CAPTURE_WINDOW_REGION_FAIL", f"hwnd={hwnd} x={x} y={y} error={e}")
+        return None
+def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng", use_hyocr=True, hwnd=None):
+    results = _ocr_tesseract(x, y, region_size, lang, hwnd=hwnd)
+    if results:
+        return results
+    if use_hyocr and HAS_HYOCR and hyocr_available():
+        logger.info("[WIN_REC] OCR_FALLBACK tesseract=0 trying hyocr x=%d y=%d", x, y)
+        results = hyocr_recognize(x, y, region_size)
+        if results:
+            return results
+    return []
+
+
+def _ocr_tesseract(x, y, region_size, lang, hwnd=None):
     try:
         import mss
         import pytesseract
         from PIL import Image
-        half = region_size // 2
-        region = {
-            "left": max(0, int(x) - half),
-            "top": max(0, int(y) - half),
-            "width": region_size,
-            "height": region_size,
-        }
-        with mss.MSS() as sct:
-            screenshot = sct.grab(region)
-            img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+        img = None
+        if hwnd and hwnd > 0:
+            img = capture_window_region(hwnd, x, y, region_size)
+        if img is None:
+            half = region_size // 2
+            region = {
+                "left": max(0, int(x) - half),
+                "top": max(0, int(y) - half),
+                "width": region_size,
+                "height": region_size,
+            }
+            with mss.MSS() as sct:
+                screenshot = sct.grab(region)
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
         data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
         results = []
         for i, text in enumerate(data["text"]):
@@ -191,13 +271,13 @@ def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
                 continue
             tx = data["left"][i] + data["width"][i] // 2
             ty = data["top"][i] + data["height"][i] // 2
-            abs_x = region["left"] + tx
-            abs_y = region["top"] + ty
+            abs_x = int(x) - region_size // 2 + tx
+            abs_y = int(y) - region_size // 2 + ty
             results.append({
                 "text": text.strip(),
                 "x": abs_x, "y": abs_y,
-                "offset_x": abs_x - x,
-                "offset_y": abs_y - y,
+                "offset_x": abs_x - int(x),
+                "offset_y": abs_y - int(y),
             })
         return results
     except Exception:
@@ -205,20 +285,24 @@ def ocr_at_point(x, y, region_size=OCR_REGION_SIZE, lang="chi_sim+eng"):
 
 
 @log_call("WIN_REC", "capture_template")
-def capture_template(x, y, size=TEMPLATE_SIZE, save_dir=None, index=0):
+def capture_template(x, y, size=TEMPLATE_SIZE, save_dir=None, index=0, hwnd=None):
     try:
         import mss
         from PIL import Image
-        half = size // 2
-        region = {
-            "left": max(0, int(x) - half),
-            "top": max(0, int(y) - half),
-            "width": size,
-            "height": size,
-        }
-        with mss.MSS() as sct:
-            screenshot = sct.grab(region)
-            img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+        img = None
+        if hwnd and hwnd > 0:
+            img = capture_window_region(hwnd, x, y, size)
+        if img is None:
+            half = size // 2
+            region = {
+                "left": max(0, int(x) - half),
+                "top": max(0, int(y) - half),
+                "width": size,
+                "height": size,
+            }
+            with mss.MSS() as sct:
+                screenshot = sct.grab(region)
+                img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
             fname = f"tpl_{index:04d}.png"
@@ -252,6 +336,7 @@ class WinRecorder:
         self._drag_last_x = 0
         self._drag_last_y = 0
         self._my_pid = os.getpid()
+        self._whitelist_hwnd = 0
         os.makedirs(screenshot_dir, exist_ok=True)
 
     def start(self):
@@ -266,6 +351,7 @@ class WinRecorder:
         self._template_count = 0
         self._dragging = False
         self._drag_button = None
+        self._whitelist_hwnd = 0
         logger.info("Windows录制初始化, pid=%d", self._my_pid)
 
         self._hook_thread = threading.Thread(target=self._hook_loop, daemon=True)
@@ -356,23 +442,38 @@ class WinRecorder:
 
     @log_call("WIN_REC", "_get_window_info")
     def _get_window_info(self, x, y):
-        pid, title, cls, bounds = get_window_at_point(x, y)
+        pid, title, cls, bounds, hwnd = get_window_at_point(x, y)
         return {
             "pid": pid or 0,
             "window": {"owner": title, "title": title, "class": cls},
             "window_bounds": bounds if bounds else {},
+            "hwnd": hwnd or 0,
         }
 
     @log_call("WIN_REC", "_on_mouse_down")
     def _on_mouse_down(self, x, y, button, t):
         log_step("WIN_REC", "MOUSE_DOWN", f"x={x} y={y} btn={button}")
         win = self._get_window_info(x, y)
+        pid = win.get("pid", 0)
+        if pid == self._my_pid:
+            return
+        if HAS_WINDOW_FILTERS and pid:
+            owner = win.get("window", {}).get("owner", "")
+            title = win.get("window", {}).get("title", "")
+            ft = get_filter_type(owner, title)
+            if ft == "blacklist":
+                return
+            if ft == "whitelist":
+                self._whitelist_hwnd = win.get("hwnd", 0)
+            else:
+                self._whitelist_hwnd = 0
+        hwnd = self._whitelist_hwnd or win.get("hwnd", 0)
         ev = {"type": "mouse_down", "x": x, "y": y, "button": button, "time": t}
         ev.update(win)
         if self.ocr_anchors:
             self._ocr_queue.append(("mouse_down", len(self.events), x, y))
         if self.visual_templates:
-            tpl = capture_template(x, y, save_dir=self._template_dir, index=self._template_count)
+            tpl = capture_template(x, y, save_dir=self._template_dir, index=self._template_count, hwnd=hwnd if hwnd and hwnd > 0 else None)
             if tpl:
                 ev["template"] = tpl
                 self._template_count += 1
@@ -462,7 +563,9 @@ class WinRecorder:
         for event_type, idx, x, y in self._ocr_queue:
             if idx >= len(self.events):
                 continue
-            results = ocr_at_point(x, y)
+            ev = self.events[idx]
+            hwnd = ev.get("hwnd", 0)
+            results = ocr_at_point(x, y, hwnd=hwnd if hwnd and hwnd > 0 else None)
             if results:
                 best = min(results, key=lambda r: abs(r["offset_x"]) + abs(r["offset_y"]))
                 if len(best["text"]) >= 2:

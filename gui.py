@@ -373,7 +373,7 @@ class AutoRepeatApp:
         ttk.Button(intent_btn_row, text="保存文本", command=self._save_intent_text, width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(intent_btn_row, text="弹出编辑", command=self._popup_intent_editor, width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(intent_btn_row, text="按窗口拆分", command=self._split_by_window, width=10).pack(side=tk.LEFT, padx=2)
-        ttk.Button(intent_btn_row, text="窗口黑名单", command=self._edit_window_blacklist, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intent_btn_row, text="窗口过滤", command=self._edit_window_filters, width=10).pack(side=tk.LEFT, padx=2)
         self.intent_text = tk.Text(intent_frame, height=3, wrap=tk.WORD, font=("", 10))
         self.intent_text.pack(fill=tk.X, pady=(2, 0))
         self.intent_var = tk.StringVar(value="")
@@ -1051,23 +1051,28 @@ class AutoRepeatApp:
 
     def _open_visual_editor(self):
         sel = self.tree.selection()
-        if not sel:
-            messagebox.showwarning("提示", "请先选择一个脚本")
-            return
-        item = self.tree.item(sel[0])
-        name = item["values"][0]
-        action_log.info("打开可视化编辑器 name=%s", name)
+        name = None
+        events = []
+        if sel:
+            item = self.tree.item(sel[0])
+            name = item["values"][0]
+            action_log.info("打开可视化编辑器 name=%s", name)
+            try:
+                data = self.sm.load(name)
+                events = data.get("events", []) if data else []
+            except Exception as e:
+                action_log.warning("加载脚本失败: %s", e)
+        else:
+            action_log.info("打开可视化编辑器(空)")
         try:
             from visual_editor import VisualEditor
-            data = self.sm.load(name)
-            events = data.get("events", []) if data else []
             if not hasattr(self, '_visual_editor'):
                 self._visual_editor = VisualEditor(
                     scripts_dir=self._scripts_dir,
-                    on_save=self._visual_editor_save,
+                    on_save=lambda ev, xml: self._visual_editor_save_with_name(name or "untitled", ev, xml),
                     on_run=self._visual_editor_run,
                 )
-            self._visual_editor._on_save_cb = lambda ev, xml: self._visual_editor_save_with_name(name, ev, xml)
+            self._visual_editor._on_save_cb = lambda ev, xml: self._visual_editor_save_with_name(name or "untitled", ev, xml)
             self._visual_editor.open(events=events)
         except ImportError:
             messagebox.showerror("错误", "pywebview未安装\n请运行: pip install pywebview")
@@ -3256,6 +3261,13 @@ class AutoRepeatApp:
             self._scheduler.stop()
         if hasattr(self, '_event_watcher') and self._event_watcher:
             self._event_watcher.stop()
+        if hasattr(self, '_visual_editor') and self._visual_editor:
+            try:
+                if self._visual_editor._process:
+                    self._visual_editor._process.kill()
+                    sync_log.debug("已关闭可视化编辑器子进程 PID=%d", self._visual_editor._process.pid)
+            except Exception:
+                pass
         self.root.destroy()
 
     def _build_marketplace(self):

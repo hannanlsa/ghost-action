@@ -55,6 +55,9 @@ class AdaptiveEngine:
         start = time.time()
         interval = interval_start
         attempt = 0
+        if strategy == "pixel_change":
+            self._last_screenshot = None
+            self._last_screenshot_time = 0
         while time.time() - start < timeout:
             if check_fn:
                 try:
@@ -157,37 +160,42 @@ class AdaptiveEngine:
             return True
         try:
             from ApplicationServices import AXUIElementCreateApplication, AXUIElementCopyAttributeValue
-            from CoreFoundation import kCFAllocatorDefault
             apps = self._get_frontmost_app_pid()
             if not apps:
                 return True
             ax_app = AXUIElementCreateApplication(apps)
-            value = None
             try:
                 err, value = AXUIElementCopyAttributeValue(ax_app, "AXFocusedWindow", None)
             except Exception:
                 return True
             if not value:
                 return True
-            try:
-                err, children = AXUIElementCopyAttributeValue(value, "AXChildren", None)
-                if not children:
-                    return True
-                for child in children:
-                    try:
-                        err, role = AXUIElementCopyAttributeValue(child, "AXRole", None)
-                        err, title = AXUIElementCopyAttributeValue(child, "AXTitle", None)
-                        if ax_role and role == ax_role:
-                            return True
-                        if ax_title and title and ax_title in title:
-                            return True
-                    except Exception:
-                        continue
-            except Exception:
-                return True
-            return False
+            return self._search_ax_element(value, ax_role, ax_title, depth=0)
         except Exception:
             return True
+
+    def _search_ax_element(self, element, ax_role, ax_title, depth=0):
+        if depth > 5:
+            return False
+        try:
+            err, children = AXUIElementCopyAttributeValue(element, "AXChildren", None)
+            if not children:
+                return False
+            for child in children:
+                try:
+                    err, role = AXUIElementCopyAttributeValue(child, "AXRole", None)
+                    err, title = AXUIElementCopyAttributeValue(child, "AXTitle", None)
+                    if ax_role and role == ax_role:
+                        return True
+                    if ax_title and title and ax_title in title:
+                        return True
+                    if self._search_ax_element(child, ax_role, ax_title, depth + 1):
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return False
 
     def _get_frontmost_app_pid(self):
         try:
@@ -224,9 +232,9 @@ class AdaptiveEngine:
                 alternatives.append(("dom_fill", (dom, text)))
         return alternatives
 
-    def execute_alternative(self, alt_type, alt_data, browser_engine=None, browser_profile=None):
+    def execute_alternative(self, alt_type, alt_data, browser_engine=None, browser_profile=None, pid=None):
         if alt_type == "accessibility_press":
-            return self._alt_accessibility_press(alt_data)
+            return self._alt_accessibility_press(alt_data, pid=pid)
         elif alt_type == "ocr_click":
             return self._alt_ocr_click(alt_data)
         elif alt_type == "dom_click":
@@ -237,7 +245,7 @@ class AdaptiveEngine:
             return self._alt_ai_locate(alt_data)
         return False
 
-    def _alt_accessibility_press(self, ax_data):
+    def _alt_accessibility_press(self, ax_data, pid=None):
         if not IS_MAC:
             return False
         try:
@@ -245,7 +253,7 @@ class AdaptiveEngine:
             ax_role = ax_data.get("AXRole", "")
             ax_title = ax_data.get("AXTitle", "")
             ax_desc = ax_data.get("AXDescription", "")
-            elem = find_element_by_attrs(role=ax_role, title=ax_title, description=ax_desc)
+            elem = find_element_by_attrs(pid=pid, role=ax_role, title=ax_title, description=ax_desc)
             if elem:
                 from ApplicationServices import AXUIElementPerformAction
                 AXUIElementPerformAction(elem, "AXPress")
@@ -392,7 +400,7 @@ class AdaptiveEngine:
                 from Quartz import kCGEventMouseMoved, kCGEventLeftMouseDown, kCGEventLeftMouseUp
                 from Quartz import kCGMouseButtonLeft, kCGEventSourceStateHIDSystemState
                 from Quartz import CGEventSourceCreate
-                src = CGEventSourceCreate(kCGEventEventSourceStateHIDSystemState)
+                src = CGEventSourceCreate(kCGEventSourceStateHIDSystemState)
                 move = CGEventCreateMouseEvent(src, kCGEventMouseMoved, (x, y), kCGMouseButtonLeft)
                 down = CGEventCreateMouseEvent(src, kCGEventLeftMouseDown, (x, y), kCGMouseButtonLeft)
                 up = CGEventCreateMouseEvent(src, kCGEventLeftMouseUp, (x, y), kCGMouseButtonLeft)
